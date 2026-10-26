@@ -1,5 +1,5 @@
 // Prisma schema for WhatsApp Client
-// All database entities in future phases will reference Session (sessionId) for multi-account support
+// Multi-account ready architecture: Session & AuthKey models store isolated Baileys auth state
 
 generator client {
   provider = "prisma-client-js"
@@ -11,24 +11,44 @@ datasource db {
 }
 
 model AppUser {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("app_users")
 }
 
 model Session {
-  id              String    @id @default(uuid())
-  name            String
-  phoneNumber     String?
-  status          String    @default("DISCONNECTED")
-  encryptedAuth   String?   @db.Text
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  lastConnectedAt DateTime?
+  id                    String    @id @default(uuid())
+  name                  String
+  phoneNumber           String?
+  status                String    @default("idle")
+  encryptedCreds        String?   @db.Text
+  lastConnectedAt       DateTime?
+  lastDisconnectReason  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  authKeys              AuthKey[]
 
   @@map("sessions")
+}
+
+model AuthKey {
+  id             String   @id @default(uuid())
+  sessionId      String
+  type           String
+  keyId          String
+  encryptedValue String   @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  session        Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, type, keyId])
+  @@index([sessionId])
+  @@map("auth_keys")
 }

@@ -5,17 +5,41 @@ import {
   Bell,
   Sliders,
   Check,
+  User,
+  LogOut,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { Switch } from '../components/ui/Switch';
 import { Badge } from '../components/ui/Badge';
 import { useUIStore } from '../store/useUIStore';
+import { useToastStore } from '../store/useToastStore';
+import { api } from '../lib/api';
+import { getSocket } from '../lib/socket';
 import { cn } from '../lib/utils';
 
 export const SettingsView: React.FC = () => {
-  const { theme, setTheme } = useUIStore();
+  const { theme, setTheme, currentUser, setCurrentUser, setActiveNav } = useUIStore();
+  const { addToast } = useToastStore();
   const [notifications, setNotifications] = React.useState(true);
   const [autoDownload, setAutoDownload] = React.useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+      setCurrentUser(null);
+      getSocket().disconnect();
+      addToast({
+        title: 'Signed Out',
+        message: 'You have been signed out of the dashboard.',
+        type: 'info',
+      });
+      setActiveNav('login');
+    } catch {
+      setCurrentUser(null);
+      setActiveNav('login');
+    }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-app flex flex-col items-center">
@@ -127,6 +151,35 @@ export const SettingsView: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Account Management Card */}
+        {currentUser && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <User className="w-4 h-4 text-accent" />
+                Account & Authentication
+              </CardTitle>
+              <CardDescription>
+                Signed in as <span className="font-semibold text-text-main">{currentUser.email}</span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-text-main">{currentUser.name || 'Admin User'}</p>
+                <p className="text-xs text-text-muted">Master dashboard account</p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleLogout}
+                leftIcon={<LogOut className="w-3.5 h-3.5" />}
+              >
+                Sign Out
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* System & Architecture Info */}
         <Card variant="subtle" className="p-5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -134,14 +187,14 @@ export const SettingsView: React.FC = () => {
               Environment
             </span>
             <Badge variant="success" size="sm">
-              Phase 0 Complete
+              Phase 1 Connect Ready
             </Badge>
           </div>
           <div className="text-xs text-text-secondary flex flex-col gap-1 font-mono">
             <div>Root: D:\whatsapp-client</div>
             <div>Database: PostgreSQL 16 (Native, port 5432)</div>
-            <div>Prisma Schema: AppUser, Session</div>
-            <div>Baileys Module: Isolated backend/src/whatsapp</div>
+            <div>Prisma Models: AppUser, Session, AuthKey</div>
+            <div>Engine: @whiskeysockets/baileys@6.7.24 (Pinned, Isolated)</div>
           </div>
         </Card>
       </div>

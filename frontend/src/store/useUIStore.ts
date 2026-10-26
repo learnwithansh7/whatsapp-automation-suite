@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { User } from '../lib/api';
 
 export type Theme = 'light' | 'dark';
 export type NavItem =
@@ -17,20 +18,23 @@ interface UIState {
   activeNav: NavItem;
   isSidebarOpen: boolean;
   mobileView: 'list' | 'chat';
+  currentUser: User | null;
   toggleTheme: () => void;
   setTheme: (theme: Theme) => void;
   setActiveNav: (nav: NavItem) => void;
   toggleSidebar: () => void;
   setMobileView: (view: 'list' | 'chat') => void;
+  setCurrentUser: (user: User | null) => void;
 }
 
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       theme: 'light',
-      activeNav: 'chats',
+      activeNav: 'connection',
       isSidebarOpen: true,
       mobileView: 'list',
+      currentUser: null,
 
       toggleTheme: () =>
         set((state) => {
@@ -59,6 +63,7 @@ export const useUIStore = create<UIState>()(
       setActiveNav: (activeNav) => set({ activeNav }),
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
       setMobileView: (mobileView) => set({ mobileView }),
+      setCurrentUser: (currentUser) => set({ currentUser }),
     }),
     {
       name: 'theme-storage',

@@ -1,19 +1,19 @@
 # Custom WhatsApp Client (Web App) - Monorepo
 
-A private, extensible WhatsApp Web client linked via Baileys with multi-account support, scheduled messages, CRM tags, AI chat replies, and anti-delete features.
+A private, extensible WhatsApp Web client linked via Baileys with multi-account ready schema, AES-256-GCM database session storage, Socket.IO real-time QR pairing, and Clean Light UI.
 
 ---
 
-## Architecture Overview (Phase 0)
+## Architecture Overview (Phase 1)
 
 ```
 D:\whatsapp-client\
-├── backend\       # Fastify + TypeScript (strict) + Prisma ORM + Zod
-├── frontend\      # React 18 + Vite + Tailwind CSS + TanStack Query + Zustand
+├── backend\       # Fastify API + Baileys Session Manager + Prisma ORM + Socket.IO
+├── frontend\      # React 18 + Vite + Tailwind CSS (Clean Light) + TanStack Query + Zustand
 ├── ai-service\    # Python FastAPI placeholder (Phase 4+)
 ├── infra\         # docker-compose.yml (PostgreSQL + Redis optional infra config)
 ├── .env.example   # Documented environment variables template
-├── .gitignore     # Git ignore rules ensuring no secrets or node_modules are tracked
+├── .gitignore     # Git ignore rules ensuring no secrets or credentials are tracked
 └── README.md      # Setup, operational guide, and test checklists
 ```
 
@@ -24,33 +24,38 @@ D:\whatsapp-client\
 1. **Node.js**: `v20.0.0` or newer LTS (tested with Node `22.x`)
 2. **Package Manager**: `npm` (tested with `10.9.x`)
 3. **PostgreSQL**: Native PostgreSQL 16 (or Docker container) running on port `5432`
-4. **Redis**: Optional in Phase 0 (will be utilized with BullMQ in Phase 3)
+4. **Redis**: Optional in Phase 0/1 (will be utilized with BullMQ in Phase 3)
 
 ---
 
-## First-Time Setup
+## Environment Variables (`backend/.env`)
 
-### 1. Configure Backend Environment
-Copy `.env.example` into `backend/.env` (already prepared on this machine):
-```bash
-# In D:\whatsapp-client\backend
-cp ../.env.example .env
-```
-Ensure `backend/.env` has your valid PostgreSQL credentials:
+Ensure `backend/.env` has the following variables populated:
+
 ```env
+NODE_ENV=development
+PORT=3000
+HOST=127.0.0.1
+
+# PostgreSQL connection string
 DATABASE_URL="postgresql://postgres:<PASSWORD>@localhost:5432/whatsapp_client?schema=public"
+
+# 32-byte AES-256-GCM encryption key (Base64)
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+ENCRYPTION_KEY="your_base64_encoded_32_byte_key_here="
+
+# JWT Secret for dashboard session cookies
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET="your_secure_jwt_secret_here"
 ```
 
-### 2. Generate Prisma Client & Run Database Migration
-Once PostgreSQL is running and the database `whatsapp_client` is created:
-```bash
-cd D:\whatsapp-client\backend
-npm run prisma:migrate -- --name init
-```
+---
 
-To inspect your database schema and tables visually at any time:
-```bash
-npm run prisma:studio
+## First-Time Setup & Migrations
+
+```powershell
+# In D:\whatsapp-client\backend
+npm run prisma:migrate
 ```
 
 ---
@@ -64,59 +69,40 @@ Open two PowerShell terminals:
 cd D:\whatsapp-client\backend
 npm run dev
 ```
-*Health endpoint will be live at: [http://localhost:3000/health](http://localhost:3000/health)*
+*Health endpoint live at: [http://localhost:3000/health](http://localhost:3000/health)*
 
 ### Terminal 2: Frontend Web App (Port 5173)
 ```powershell
 cd D:\whatsapp-client\frontend
 npm run dev
 ```
-*Frontend will be live at: [http://localhost:5173](http://localhost:5173)*
-
-The Vite dev server automatically proxies `/api/*` and `/health` requests to `http://localhost:3000`, eliminating CORS issues during development.
+*Web dashboard live at: [http://localhost:5173](http://localhost:5173)*
 
 ---
 
-## Testing `/health`
-
-You can verify the system health via cURL, PowerShell, or browser:
+## Running Automated Tests
 
 ```powershell
-# In PowerShell:
-curl http://localhost:3000/health
-```
-
-Expected JSON response:
-```json
-{
-  "status": "ok",
-  "uptime": 42,
-  "timestamp": "2026-10-24T10:30:00.000Z",
-  "responseTimeMs": 3,
-  "services": {
-    "backend": "ok",
-    "database": {
-      "status": "connected",
-      "latencyMs": 2,
-      "error": null
-    },
-    "redis": {
-      "status": "not configured"
-    }
-  }
-}
-```
-
----
-
-## Quality Checks & Linting
-
-```powershell
-# Backend lint
 cd D:\whatsapp-client\backend
-npm run lint
-
-# Frontend lint
-cd D:\whatsapp-client\frontend
-npm run lint
+npm test
 ```
+*Executes 10 unit tests covering AES-256-GCM round-tripping & tampering detection, Baileys disconnect reason classification, and exponential backoff calculations.*
+
+---
+
+## How to Connect WhatsApp
+
+1. Open [http://localhost:5173](http://localhost:5173).
+2. On first visit, register your administrator account.
+3. Navigate to **WhatsApp Linked Device** (QR icon on sidebar).
+4. Click **Connect WhatsApp**:
+   - The backend initializes the Baileys session socket and emits a live QR code via Socket.IO.
+   - Open WhatsApp on your phone: **Settings > Linked Devices > Link a Device**.
+   - Point your phone camera at the QR code on screen.
+5. Once paired:
+   - Status badge turns green (`Connected`).
+   - Phone number displays on screen.
+   - All session credentials and signal keys are encrypted in PostgreSQL via AES-256-GCM.
+6. **Backend Restart Test**:
+   - Stop the backend server and start it again.
+   - The backend auto-starts existing sessions from the database and reconnects **without needing a new QR code**.

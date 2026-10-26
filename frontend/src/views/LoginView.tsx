@@ -1,23 +1,41 @@
-import React, { useState } from 'react';
-import { Mail, Lock, User, ArrowRight, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useUIStore } from '../store/useUIStore';
 import { useToastStore } from '../store/useToastStore';
+import { api } from '../lib/api';
+import { getSocket } from '../lib/socket';
 
 export const LoginView: React.FC = () => {
   const [isRegister, setIsRegister] = useState(false);
+  const [canRegister, setCanRegister] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { setActiveNav } = useUIStore();
+  const { setActiveNav, setCurrentUser } = useUIStore();
   const { addToast } = useToastStore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    api
+      .canRegister()
+      .then((res) => {
+        setCanRegister(res.canRegister);
+        if (res.canRegister) {
+          setIsRegister(true);
+        }
+      })
+      .catch(() => {
+        // Fallback to login
+        setCanRegister(false);
+      });
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -33,15 +51,36 @@ export const LoginView: React.FC = () => {
 
     setIsLoading(true);
 
-    setTimeout(() => {
+    try {
+      if (isRegister) {
+        const res = await api.register({ email, password, name });
+        setCurrentUser(res.user);
+        addToast({
+          title: 'Account Created',
+          message: `Welcome, ${res.user.name || res.user.email}!`,
+          type: 'success',
+        });
+      } else {
+        const res = await api.login({ email, password });
+        setCurrentUser(res.user);
+        addToast({
+          title: 'Logged In',
+          message: `Welcome back, ${res.user.name || res.user.email}!`,
+          type: 'success',
+        });
+      }
+
+      // Connect real-time socket with authenticated cookie
+      const socket = getSocket();
+      socket.connect();
+
+      setActiveNav('connection');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Authentication failed';
+      setError(message);
+    } finally {
       setIsLoading(false);
-      addToast({
-        title: isRegister ? 'Account Created' : 'Logged In',
-        message: `Welcome back, ${name || email}!`,
-        type: 'success',
-      });
-      setActiveNav('chats');
-    }, 800);
+    }
   };
 
   return (
@@ -57,8 +96,8 @@ export const LoginView: React.FC = () => {
           </h1>
           <p className="text-xs text-text-muted mt-1">
             {isRegister
-              ? 'Create an account to manage your WhatsApp sessions'
-              : 'Sign in to access your linked devices and chats'}
+              ? 'Create your master account to manage WhatsApp sessions'
+              : 'Sign in to access your linked devices and sessions'}
           </p>
         </div>
 
@@ -72,7 +111,7 @@ export const LoginView: React.FC = () => {
                   placeholder="Your Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  leftIcon={<User className="w-4 h-4" />}
+                  leftIcon={<UserIcon className="w-4 h-4" />}
                   required
                 />
               )}
@@ -80,7 +119,7 @@ export const LoginView: React.FC = () => {
               <Input
                 label="Email Address"
                 type="email"
-                placeholder="you@domain.com"
+                placeholder="admin@local.dev"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 leftIcon={<Mail className="w-4 h-4" />}
@@ -115,27 +154,29 @@ export const LoginView: React.FC = () => {
               </Button>
             </form>
 
-            <div className="mt-5 pt-4 border-t border-border-subtle/70 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRegister(!isRegister);
-                  setError(null);
-                }}
-                className="text-xs text-text-secondary hover:text-accent font-medium transition-colors"
-              >
-                {isRegister
-                  ? 'Already have an account? Sign in'
-                  : "Don't have an account? Create one"}
-              </button>
-            </div>
+            {canRegister && (
+              <div className="mt-5 pt-4 border-t border-border-subtle/70 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegister(!isRegister);
+                    setError(null);
+                  }}
+                  className="text-xs text-text-secondary hover:text-accent font-medium transition-colors"
+                >
+                  {isRegister
+                    ? 'Already have an account? Sign in'
+                    : 'First time setup? Create account'}
+                </button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Security badge note */}
         <div className="flex items-center gap-1.5 text-xs text-text-muted">
           <ShieldCheck className="w-4 h-4 text-accent" />
-          <span>Multi-account ready schema with isolated session storage</span>
+          <span>AES-256-GCM encrypted database credentials & Argon2 hashing</span>
         </div>
       </div>
     </div>

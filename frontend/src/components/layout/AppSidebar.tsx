@@ -63,7 +63,7 @@ const NavButton: React.FC<NavButtonProps> = ({
 };
 
 export const AppSidebar: React.FC = () => {
-  const { activeNav, setActiveNav, theme, toggleTheme } = useUIStore();
+  const { activeNav, setActiveNav, theme, toggleTheme, currentUser } = useUIStore();
 
   const navItems = [
     { id: 'chats' as NavItem, label: 'Chats', icon: <MessageSquare className="w-5 h-5 stroke-[1.75]" /> },
@@ -160,12 +160,12 @@ export const AppSidebar: React.FC = () => {
           </Tooltip>
 
           {/* User Profile Avatar */}
-          <Tooltip content="My Profile / Login" position="right">
+          <Tooltip content={currentUser ? `Signed in as ${currentUser.name || currentUser.email}` : 'Sign In'} position="right">
             <button
-              onClick={() => setActiveNav('login')}
+              onClick={() => setActiveNav(currentUser ? 'settings' : 'login')}
               className="outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-full p-0.5"
             >
-              <Avatar name="Anirudh" size="sm" status="online" />
+              <Avatar name={currentUser?.name || currentUser?.email || 'Admin'} size="sm" status={currentUser ? 'online' : undefined} />
             </button>
           </Tooltip>
         </div>
