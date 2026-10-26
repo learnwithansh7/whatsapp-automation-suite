@@ -61,7 +61,10 @@ setupSocketIO(app.server);
 const start = async () => {
   try {
     await app.listen({ port: env.PORT, host: env.HOST });
-    app.log.info(`Server ready at http://${env.HOST === '0.0.0.0' ? 'localhost' : env.HOST}:${env.PORT}`);
+    if (!env.AUTH_ENABLED) {
+      app.log.warn('AUTH DISABLED - local development only');
+    }
+    app.log.info(`Server ready at http://${env.HOST}:${env.PORT}`);
 
     // Auto-start active WhatsApp sessions that have saved credentials
     await sessionManager.initAutoStart();

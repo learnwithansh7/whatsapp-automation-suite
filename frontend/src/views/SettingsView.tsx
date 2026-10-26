@@ -152,22 +152,32 @@ export const SettingsView: React.FC = () => {
         </Card>
 
         {/* Account Management Card */}
-        {currentUser && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <User className="w-4 h-4 text-accent" />
-                Account & Authentication
-              </CardTitle>
-              <CardDescription>
-                Signed in as <span className="font-semibold text-text-main">{currentUser.email}</span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-text-main">{currentUser.name || 'Admin User'}</p>
-                <p className="text-xs text-text-muted">Master dashboard account</p>
-              </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <User className="w-4 h-4 text-accent" />
+              Account & Authentication
+            </CardTitle>
+            <CardDescription>
+              {import.meta.env.VITE_AUTH_ENABLED === 'true'
+                ? `Signed in as ${currentUser?.email || 'admin@local.dev'}`
+                : 'Dashboard login bypassed (Supabase auth will replace this later)'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-text-main">
+                {import.meta.env.VITE_AUTH_ENABLED === 'true'
+                  ? currentUser?.name || 'Admin User'
+                  : 'Local Development User'}
+              </p>
+              <p className="text-xs text-text-muted">
+                {import.meta.env.VITE_AUTH_ENABLED === 'true'
+                  ? 'Master dashboard account'
+                  : 'AUTH_ENABLED=false (Direct Access Active)'}
+              </p>
+            </div>
+            {import.meta.env.VITE_AUTH_ENABLED === 'true' && (
               <Button
                 variant="secondary"
                 size="sm"
@@ -176,9 +186,9 @@ export const SettingsView: React.FC = () => {
               >
                 Sign Out
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
 
         {/* System & Architecture Info */}
         <Card variant="subtle" className="p-5 flex flex-col gap-3">

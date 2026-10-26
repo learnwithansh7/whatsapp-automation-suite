@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { hashPassword, verifyPassword, signToken } from '../lib/auth.js';
-import { requireAuth } from '../plugins/auth.js';
+import { requireAuth, LOCAL_USER } from '../plugins/auth.js';
 import { env } from '../config/env.js';
 
 const registerSchema = z.object({
@@ -122,6 +122,16 @@ export const authRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   // Get currently authenticated user
   app.get('/auth/me', { preHandler: [requireAuth] }, async (request, reply) => {
+    if (!env.AUTH_ENABLED) {
+      return reply.send({
+        user: {
+          id: LOCAL_USER.userId,
+          email: LOCAL_USER.email,
+          name: 'Local User',
+        },
+      });
+    }
+
     const user = await prisma.appUser.findUnique({
       where: { id: request.user!.userId },
       select: {

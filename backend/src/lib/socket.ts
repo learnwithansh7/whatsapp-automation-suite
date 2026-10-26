@@ -2,6 +2,8 @@ import { Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import cookie from 'cookie';
 import { verifyToken } from './auth.js';
+import { env } from '../config/env.js';
+import { LOCAL_USER } from '../plugins/auth.js';
 import { sessionManager, SessionEvent } from '../whatsapp/index.js';
 
 export function setupSocketIO(httpServer: HttpServer): SocketIOServer {
@@ -15,6 +17,12 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer {
 
   // Authenticate socket connections using JWT cookie or handshake auth
   io.use((socket: Socket, next) => {
+    // When AUTH_ENABLED=false, allow all local Socket.IO connections
+    if (!env.AUTH_ENABLED) {
+      socket.data.user = LOCAL_USER;
+      return next();
+    }
+
     try {
       const rawCookie = socket.handshake.headers.cookie;
       let token: string | undefined;

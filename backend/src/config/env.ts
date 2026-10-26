@@ -7,7 +7,7 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3000),
-  HOST: z.string().default('0.0.0.0'),
+  HOST: z.string().default('127.0.0.1'),
   DATABASE_URL: z.string({
     required_error: 'DATABASE_URL is required (e.g. postgresql://user:password@localhost:5432/whatsapp_client?schema=public)',
   }).url('DATABASE_URL must be a valid PostgreSQL connection URL'),
@@ -23,12 +23,15 @@ const envSchema = z.object({
       }
     },
     {
-      message: 'ENCRYPTION_KEY must be a valid 32-byte base64 encoded string. Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
+      message: 'ENCRYPTION_KEY must be a valid 32-byte base64 encoded string.',
     },
   ),
-  JWT_SECRET: z.string({
-    required_error: 'JWT_SECRET is required for authenticating session cookies',
-  }).min(16, 'JWT_SECRET must be at least 16 characters long'),
+  JWT_SECRET: z.string().default('local_development_jwt_secret_placeholder_key_32bytes'),
+  // Auth flag: when false, dashboard login is bypassed (Supabase auth will replace this in a later phase)
+  AUTH_ENABLED: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true'),
   // Redis is optional in Phase 0/1 and will be added in Phase 3
   REDIS_URL: z.string().optional(),
 });
@@ -48,5 +51,24 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
-export type Env = z.infer<typeof envSchema>;
+const config = parsed.data;
+
+// Safety check: Refuse to start if AUTH_ENABLED is false in production
+if (!config.AUTH_ENABLED && config.NODE_ENV === 'production') {
+  console.error('\n=============================================================');
+  console.error(' [FATAL SECURITY ERROR] AUTH_ENABLED cannot be false in production');
+  console.error('=============================================================\n');
+  process.exit(1);
+}
+
+// Safety: When AUTH_ENABLED is false, force host to 127.0.0.1 only
+if (!config.AUTH_ENABLED) {
+  config.HOST = '127.0.0.1';
+  console.warn('\n*************************************************************');
+  console.warn(' [WARNING] AUTH DISABLED - local development only');
+  console.warn(' Server is restricted to 127.0.0.1 loopback interface');
+  console.warn('*************************************************************\n');
+}
+
+export const env = config;
+export type Env = typeof env;

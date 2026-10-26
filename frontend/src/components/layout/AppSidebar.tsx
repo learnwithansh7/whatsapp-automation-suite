@@ -159,13 +159,33 @@ export const AppSidebar: React.FC = () => {
             </button>
           </Tooltip>
 
-          {/* User Profile Avatar */}
-          <Tooltip content={currentUser ? `Signed in as ${currentUser.name || currentUser.email}` : 'Sign In'} position="right">
+          {/* User Profile Avatar / Local indicator */}
+          <Tooltip
+            content={
+              import.meta.env.VITE_AUTH_ENABLED === 'true'
+                ? currentUser
+                  ? `Signed in as ${currentUser.name || currentUser.email}`
+                  : 'Sign In'
+                : 'Local Development Mode'
+            }
+            position="right"
+          >
             <button
-              onClick={() => setActiveNav(currentUser ? 'settings' : 'login')}
+              onClick={() => setActiveNav('settings')}
               className="outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-full p-0.5"
+              aria-label="Account & Settings"
             >
-              <Avatar name={currentUser?.name || currentUser?.email || 'Admin'} size="sm" status={currentUser ? 'online' : undefined} />
+              {import.meta.env.VITE_AUTH_ENABLED === 'true' ? (
+                <Avatar
+                  name={currentUser?.name || currentUser?.email || 'Admin'}
+                  size="sm"
+                  status={currentUser ? 'online' : undefined}
+                />
+              ) : (
+                <span className="w-8 h-8 rounded-full bg-surface-subtle border border-border-subtle flex items-center justify-center text-[10px] font-bold text-text-secondary select-none shadow-subtle hover:bg-surface hover:text-text-main transition-colors">
+                  Local
+                </span>
+              )}
             </button>
           </Tooltip>
         </div>

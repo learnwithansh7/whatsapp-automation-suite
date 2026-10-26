@@ -8,8 +8,17 @@ import { SettingsView } from './views/SettingsView';
 import { LoginView } from './views/LoginView';
 import { DesignSystemView } from './views/DesignSystemView';
 import { useUIStore } from './store/useUIStore';
-import { api } from './lib/api';
+import { api, User } from './lib/api';
 import { getSocket, initSocketListeners } from './lib/socket';
+
+export const isAuthEnabled = import.meta.env.VITE_AUTH_ENABLED === 'true';
+
+const LOCAL_USER: User = {
+  id: '00000000-0000-0000-0000-000000000000',
+  email: 'local@device.lan',
+  name: 'Local User',
+  createdAt: new Date().toISOString(),
+};
 
 export default function App() {
   const { activeNav, setActiveNav, theme, currentUser, setCurrentUser } = useUIStore();
@@ -35,8 +44,15 @@ export default function App() {
     }
   }, [theme]);
 
-  // Check authentication status on startup
+  // Check authentication status on startup (or default to local user if auth disabled)
   useEffect(() => {
+    if (!isAuthEnabled) {
+      setCurrentUser(LOCAL_USER);
+      const socket = getSocket();
+      socket.connect();
+      return;
+    }
+
     api
       .getMe()
       .then((res) => {
@@ -54,15 +70,15 @@ export default function App() {
 
   // Initialize global Socket.IO event listeners for TanStack Query updates
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser || !isAuthEnabled) {
       const cleanup = initSocketListeners(queryClient);
       return cleanup;
     }
   }, [currentUser, queryClient]);
 
   const renderActiveView = () => {
-    // If not logged in and not viewing the design gallery, show Login/Register
-    if (!currentUser && activeNav !== 'design') {
+    // If auth is enabled and user is not logged in and not viewing design, show Login
+    if (isAuthEnabled && !currentUser && activeNav !== 'design') {
       return <LoginView />;
     }
 
