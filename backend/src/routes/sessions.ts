@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../plugins/auth.js';
 import { sessionManager } from '../whatsapp/index.js';
+import { mergeService } from '../whatsapp/mergeService.js';
 
 const createSessionSchema = z.object({
   name: z.string().min(1, 'Session name is required').max(50),
@@ -47,7 +48,7 @@ export const sessionRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
   // GET /api/sessions - List all sessions with merged runtime status
   app.get('/sessions', async () => {
     const dbSessions = await prisma.session.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
       select: {
         id: true,
         name: true,
@@ -62,9 +63,14 @@ export const sessionRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
     // Merge in-memory runtime status (live QR, active reconnect status)
     const sessions = dbSessions.map((s) => {
       const runtime = sessionManager.getStatus(s.id);
+      const isRunning = sessionManager.getSocket(s.id) !== undefined;
+      const effectiveStatus = isRunning
+        ? (runtime.status !== 'idle' ? runtime.status : s.status)
+        : (s.status === 'qr' || s.status === 'connecting' || s.status === 'reconnecting' ? 'idle' : s.status);
+
       return {
         ...s,
-        status: runtime.status !== 'idle' ? runtime.status : s.status,
+        status: effectiveStatus,
         phoneNumber: runtime.phoneNumber || s.phoneNumber,
         lastConnectedAt: runtime.lastConnectedAt || s.lastConnectedAt,
         qr: runtime.qr || null,
@@ -145,7 +151,23 @@ export const sessionRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
   });
 
   // POST /api/sessions/:id/logout - Logout from WhatsApp and wipe credentials
-  app.post<{ Params: { id: string } }>('/sessions/:id/logout', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body?: { deleteData?: boolean } }>(
+    '/sessions/:id/logout',
+    async (request, reply) => {
+      const { id } = request.params;
+      const deleteData = !!request.body?.deleteData;
+
+      const result = await sessionManager.logoutSession(id, deleteData);
+      return reply.send({
+        message: result.message,
+        status: 'logged_out',
+        remoteLogoutSuccess: result.remoteLogoutSuccess,
+      });
+    },
+  );
+
+  // POST /api/sessions/:id/reset - Wipe stale credentials and start fresh QR flow
+  app.post<{ Params: { id: string } }>('/sessions/:id/reset', async (request, reply) => {
     const { id } = request.params;
 
     const session = await prisma.session.findUnique({
@@ -156,7 +178,27 @@ export const sessionRoutes: FastifyPluginAsync = async (app: FastifyInstance) =>
       return reply.status(404).send({ error: 'Session not found' });
     }
 
-    await sessionManager.logoutSession(id);
-    return reply.send({ message: 'Session logged out and credentials wiped', status: 'logged_out' });
+    await sessionManager.resetSession(id);
+    return reply.send({ message: 'Session reset. Generating fresh QR code...', status: 'connecting' });
+  });
+
+  // POST /api/sessions/:id/backfill - Merge duplicate chats and refresh display names
+  app.post<{ Params: { id: string } }>('/sessions/:id/backfill', async (request, reply) => {
+    const { id } = request.params;
+
+    const session = await prisma.session.findUnique({
+      where: { id },
+    });
+
+    if (!session) {
+      return reply.status(404).send({ error: 'Session not found' });
+    }
+
+    const result = await mergeService.backfillSession(id);
+    return reply.send({
+      message: 'Backfill completed',
+      mergedChats: result.mergedChats,
+      updatedChats: result.updatedChats,
+    });
   });
 };

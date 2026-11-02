@@ -49,3 +49,7 @@ Thumbs.db
 whatsapp-sessions/
 auth_info_baileys/
 *.auth
+
+# Local media, avatars, and preview storage
+backend/storage/
+storage/

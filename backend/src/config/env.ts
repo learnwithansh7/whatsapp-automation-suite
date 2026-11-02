@@ -34,6 +34,22 @@ const envSchema = z.object({
     .transform((val) => val === 'true'),
   // Redis is optional in Phase 0/1 and will be added in Phase 3
   REDIS_URL: z.string().optional(),
+  // Phase 3: Anti-Ban Send Queue & Rate Limits
+  SEND_MIN_DELAY_MS: z.coerce.number().default(1500),
+  SEND_MAX_DELAY_MS: z.coerce.number().default(3500),
+  SEND_MAX_PER_MINUTE: z.coerce.number().default(20),
+  SEND_MAX_PER_HOUR: z.coerce.number().default(300),
+  // Phase 3: Media Upload & Download Limits (in MB)
+  MAX_IMAGE_SIZE_MB: z.coerce.number().default(16),
+  MAX_VIDEO_SIZE_MB: z.coerce.number().default(64),
+  MAX_DOCUMENT_SIZE_MB: z.coerce.number().default(100),
+  MAX_AUDIO_SIZE_MB: z.coerce.number().default(16),
+  AUTO_DOWNLOAD_VIDEO_MAX_MB: z.coerce.number().default(25),
+  // Phase 3: WhatsApp Read Receipts (default false - only local unread reset)
+  SEND_READ_RECEIPTS: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true'),
 });
 
 const parsed = envSchema.safeParse(process.env);

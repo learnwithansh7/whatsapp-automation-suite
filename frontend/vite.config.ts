@@ -7,6 +7,12 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Proxy /socket.io WebSocket & HTTP polling to Fastify backend
+      '/socket.io': {
+        target: 'http://127.0.0.1:3000',
+        ws: true,
+        changeOrigin: true,
+      },
       // Proxy /api requests to Fastify backend
       '/api': {
         target: 'http://127.0.0.1:3000',

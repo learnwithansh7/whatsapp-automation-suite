@@ -9,3 +9,6 @@ export type {
   SessionEvent,
 } from './sessionManager.js';
 export { calculateBackoff, classifyDisconnectReason } from './backoff.js';
+export { ingestionService } from './ingestionService.js';
+export { mapMessageStatus, parseWAMessage, getMessagePreviewText } from './messageParser.js';
+export type { ParsedMessage, ParsedMessageType } from './messageParser.js';

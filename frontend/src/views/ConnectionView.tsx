@@ -15,6 +15,8 @@ import {
   Clock,
   AlertCircle,
   Unplug,
+  Users,
+  Plus,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -23,7 +25,9 @@ import { Dialog } from '../components/ui/Dialog';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
 import { useToastStore } from '../store/useToastStore';
+import { useUIStore } from '../store/useUIStore';
 import { api, Session } from '../lib/api';
+import { cn } from '../lib/utils';
 
 interface HealthResponse {
   status: 'ok' | 'degraded' | 'error';
@@ -47,12 +51,17 @@ export const ConnectionView: React.FC = () => {
   const queryClient = useQueryClient();
   const { addToast } = useToastStore();
 
+  const { activeSessionId, setActiveSessionId } = useUIStore();
   const [isDisconnectDialogOpen, setIsDisconnectDialogOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [deleteDataOnLogout, setDeleteDataOnLogout] = useState(false);
+  const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
+  const [newAccountName, setNewAccountName] = useState('');
   const [isPairingMode, setIsPairingMode] = useState(false);
   const [pairingPhone, setPairingPhone] = useState('');
   const [pairingCodeResult, setPairingCodeResult] = useState<string | null>(null);
   const [isPairingLoading, setIsPairingLoading] = useState(false);
+  const [autoConnected, setAutoConnected] = useState<Record<string, boolean>>({});
 
   // Health Query
   const { data: health, refetch: refetchHealth, isFetching: isHealthFetching } = useQuery<HealthResponse>({
@@ -84,9 +93,43 @@ export const ConnectionView: React.FC = () => {
     }
   }, [sessionsData, queryClient]);
 
-  const activeSession: Session | undefined = sessionsData?.sessions[0];
+  // Derive active session from activeSessionId or fallback to first
+  const activeSession: Session | undefined = React.useMemo(() => {
+    if (!sessionsData?.sessions || sessionsData.sessions.length === 0) return undefined;
+    if (activeSessionId) {
+      const found = sessionsData.sessions.find((s) => s.id === activeSessionId);
+      if (found) return found;
+    }
+    return sessionsData.sessions[0];
+  }, [sessionsData, activeSessionId]);
+
+  useEffect(() => {
+    if (activeSession && activeSession.id !== activeSessionId) {
+      setActiveSessionId(activeSession.id);
+    }
+  }, [activeSession, activeSessionId, setActiveSessionId]);
 
   // Mutations
+  const createAccountMutation = useMutation({
+    mutationFn: (name: string) => api.createSession(name),
+    onSuccess: (data) => {
+      setIsAddAccountOpen(false);
+      setNewAccountName('');
+      setActiveSessionId(data.session.id);
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      addToast({
+        title: 'Account Created',
+        message: `Created account "${data.session.name}". Connecting...`,
+        type: 'info',
+      });
+      api.connect(data.session.id).catch(() => {});
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to create account';
+      addToast({ title: 'Error', message: msg, type: 'error' });
+    },
+  });
+
   const connectMutation = useMutation({
     mutationFn: (id: string) => api.connect(id),
     onSuccess: () => {
@@ -127,24 +170,77 @@ export const ConnectionView: React.FC = () => {
   });
 
   const logoutMutation = useMutation({
-    mutationFn: (id: string) => api.logoutSession(id),
-    onSuccess: () => {
+    mutationFn: ({ id, deleteData }: { id: string; deleteData: boolean }) =>
+      api.logoutSession(id, deleteData),
+    onSuccess: (res) => {
+      setIsLogoutDialogOpen(false);
+      if (res.remoteLogoutSuccess) {
+        addToast({
+          title: 'Logged out',
+          message: 'WhatsApp session unlinked successfully.',
+          type: 'info',
+        });
+      } else {
+        addToast({
+          title: 'Logged out locally',
+          message: 'Logged out locally (WhatsApp was unreachable). Local credentials wiped.',
+          type: 'warning',
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+    },
+    onError: (err: Error) => {
+      // Always succeed locally from UI perspective
       setIsLogoutDialogOpen(false);
       addToast({
-        title: 'Logged Out',
-        message: 'WhatsApp credentials and signal keys wiped successfully.',
+        title: 'Logged out locally',
+        message: err.message || 'Logged out locally (WhatsApp was unreachable). Local credentials wiped.',
         type: 'warning',
       });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (err: Error) => {
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: (id: string) => api.resetSession(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
       addToast({
-        title: 'Logout Error',
-        message: err.message,
+        title: 'Connection Reset',
+        message: 'Stale credentials cleared. Generating a fresh QR code...',
+        type: 'info',
+      });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to reset session';
+      addToast({
+        title: 'Reset Error',
+        message: msg,
         type: 'error',
       });
     },
   });
+
+  // Auto-start pairing/connection for unlinked accounts so QR code generates immediately
+  useEffect(() => {
+    if (
+      activeSession &&
+      !autoConnected[activeSession.id] &&
+      (activeSession.status === 'idle' || activeSession.status === 'logged_out' || (activeSession.status === 'qr' && !activeSession.qr)) &&
+      !activeSession.phoneNumber &&
+      !connectMutation.isPending &&
+      !resetMutation.isPending
+    ) {
+      setAutoConnected((prev) => ({ ...prev, [activeSession.id]: true }));
+      api.connect(activeSession.id).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      }).catch((err) => {
+        console.warn('Auto-connect on load notice:', err);
+      });
+    }
+  }, [activeSession, autoConnected, connectMutation.isPending, resetMutation.isPending, queryClient]);
 
   const handleRequestPairingCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -304,6 +400,60 @@ export const ConnectionView: React.FC = () => {
           </Card>
         </div>
 
+        {/* Account Switcher & Multi-Session Toolbar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-surface border border-border-subtle rounded-card shadow-card">
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
+            <span className="text-xs font-semibold text-text-muted shrink-0 flex items-center gap-1.5 pl-1">
+              <Users className="w-3.5 h-3.5 text-accent" />
+              WhatsApp Accounts:
+            </span>
+            {sessionsData?.sessions.map((sess) => {
+              const isSelected = sess.id === activeSession?.id;
+              return (
+                <button
+                  key={sess.id}
+                  onClick={() => setActiveSessionId(sess.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-control text-xs font-medium border transition-all cursor-pointer shrink-0',
+                    isSelected
+                      ? 'bg-accent-soft text-accent border-accent/30 shadow-subtle'
+                      : 'bg-surface text-text-muted border-border-subtle hover:text-text-main hover:bg-surface-subtle',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'w-2 h-2 rounded-full',
+                      sess.status === 'connected'
+                        ? 'bg-accent'
+                        : sess.status === 'reconnecting'
+                          ? 'bg-amber-500 animate-spin'
+                          : sess.status === 'error'
+                            ? 'bg-danger'
+                            : 'bg-text-muted/40',
+                    )}
+                  />
+                  <span>{sess.name}</span>
+                  {sess.phoneNumber && (
+                    <span className="text-[10px] opacity-75 font-mono">
+                      (+{sess.phoneNumber})
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsAddAccountOpen(true)}
+            leftIcon={<Plus className="w-3.5 h-3.5 text-accent" />}
+            className="shrink-0"
+          >
+            Add another account
+          </Button>
+        </div>
+
         {/* Primary Pairing Section */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* QR Code & Active Session Card (7 cols) */}
@@ -402,10 +552,56 @@ export const ConnectionView: React.FC = () => {
                       Live QR (Auto-updating)
                     </span>
                   </div>
-                ) : activeSession?.status === 'connecting' || connectMutation.isPending ? (
+                ) : activeSession?.status === 'reconnecting' ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <Spinner size="lg" className="text-warning" />
+                    <div>
+                      <p className="text-sm font-semibold text-text-main">
+                        Reconnecting to WhatsApp...
+                      </p>
+                      <p className="text-xs text-text-muted mt-1 max-w-[240px]">
+                        {activeSession.lastDisconnectReason || 'Connection closed. Retrying with backoff...'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => activeSession && resetMutation.mutate(activeSession.id)}
+                      isLoading={resetMutation.isPending}
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5 text-accent" />}
+                      className="mt-1"
+                    >
+                      Reset Connection & Show QR
+                    </Button>
+                  </div>
+                ) : activeSession?.status === 'error' ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-danger-soft text-danger flex items-center justify-center">
+                      <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-text-main">
+                        Connection Error
+                      </p>
+                      <p className="text-xs text-text-muted mt-1 max-w-[240px]">
+                        {activeSession.lastDisconnectReason || 'Reconnection failed after multiple attempts.'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => activeSession && resetMutation.mutate(activeSession.id)}
+                      isLoading={resetMutation.isPending}
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                      className="mt-1"
+                    >
+                      Reset Connection & Show QR
+                    </Button>
+                  </div>
+                ) : activeSession?.status === 'connecting' || (activeSession?.status === 'qr' && !activeSession?.qr) || connectMutation.isPending ? (
                   <div className="flex flex-col items-center gap-3">
                     <Spinner size="lg" className="text-accent" />
-                    <p className="text-xs text-text-muted">Starting WhatsApp socket...</p>
+                    <p className="text-xs text-text-muted">Generating WhatsApp pairing QR code...</p>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-3">
@@ -479,6 +675,18 @@ export const ConnectionView: React.FC = () => {
                     onClick={() => setIsPairingMode(true)}
                   >
                     Use pairing code
+                  </Button>
+                )}
+
+                {(activeSession?.status === 'error' || activeSession?.status === 'reconnecting') && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => activeSession && resetMutation.mutate(activeSession.id)}
+                    isLoading={resetMutation.isPending}
+                    leftIcon={<RefreshCw className="w-4 h-4 text-accent" />}
+                  >
+                    Reset Connection
                   </Button>
                 )}
               </div>
@@ -580,26 +788,117 @@ export const ConnectionView: React.FC = () => {
         </div>
       </Dialog>
 
-      {/* Logout Confirmation Dialog */}
+      {/* Logout Confirmation Dialog with Data Retention Option */}
       <Dialog
         isOpen={isLogoutDialogOpen}
         onClose={() => setIsLogoutDialogOpen(false)}
-        title="Logout and Wipe Credentials?"
-        description="This will permanently disconnect this device from your WhatsApp account and delete all stored encryption credentials and signal keys from the database. A new QR code scan will be required next time."
+        title="Logout WhatsApp Session"
+        description="Choose what to do with the messages and chat history for this WhatsApp account before logging out."
       >
-        <div className="flex items-center justify-end gap-2 pt-2">
+        <div className="flex flex-col gap-3 py-2">
+          <label className="flex items-start gap-3 p-3 rounded-control border border-border-subtle hover:bg-surface-subtle cursor-pointer transition-colors">
+            <input
+              type="radio"
+              name="logout-data-choice"
+              checked={!deleteDataOnLogout}
+              onChange={() => setDeleteDataOnLogout(false)}
+              className="mt-0.5 accent-accent"
+            />
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-text-main">
+                Keep old chats (archive this account)
+              </span>
+              <span className="text-[11px] text-text-muted mt-0.5">
+                Disconnects from WhatsApp and wipes encryption keys, but preserves existing message history in your dashboard.
+              </span>
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 p-3 rounded-control border border-danger/20 hover:bg-danger-soft/20 cursor-pointer transition-colors">
+            <input
+              type="radio"
+              name="logout-data-choice"
+              checked={deleteDataOnLogout}
+              onChange={() => setDeleteDataOnLogout(true)}
+              className="mt-0.5 accent-danger"
+            />
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-danger">
+                Delete old chats and messages
+              </span>
+              <span className="text-[11px] text-text-muted mt-0.5">
+                Permanently wipes all chats, messages, and downloaded media files associated with this account.
+              </span>
+            </div>
+          </label>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-border-subtle mt-2">
           <Button variant="secondary" size="sm" onClick={() => setIsLogoutDialogOpen(false)}>
             Cancel
           </Button>
           <Button
             variant="danger"
             size="sm"
-            onClick={() => activeSession && logoutMutation.mutate(activeSession.id)}
+            onClick={() =>
+              activeSession &&
+              logoutMutation.mutate({ id: activeSession.id, deleteData: deleteDataOnLogout })
+            }
             isLoading={logoutMutation.isPending}
           >
-            Confirm Logout & Wipe
+            {deleteDataOnLogout ? 'Confirm Logout & Delete Data' : 'Confirm Logout & Archive'}
           </Button>
         </div>
+      </Dialog>
+
+      {/* Add Another Account Dialog */}
+      <Dialog
+        isOpen={isAddAccountOpen}
+        onClose={() => setIsAddAccountOpen(false)}
+        title="Add Another WhatsApp Account"
+        description="Link an additional WhatsApp phone number. Each account operates independently with its own chats, contacts, and pairing QR code."
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (newAccountName.trim()) {
+              createAccountMutation.mutate(newAccountName.trim());
+            }
+          }}
+          className="flex flex-col gap-4 py-2"
+        >
+          <div>
+            <label className="text-xs font-medium text-text-muted mb-1.5 block">
+              Account Label / Name
+            </label>
+            <Input
+              placeholder="e.g. Work Account, Personal Phone"
+              value={newAccountName}
+              onChange={(e) => setNewAccountName(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAddAccountOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={createAccountMutation.isPending}
+              disabled={!newAccountName.trim()}
+            >
+              Create & Show QR
+            </Button>
+          </div>
+        </form>
       </Dialog>
     </div>
   );

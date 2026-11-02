@@ -1,10 +1,18 @@
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyMultipart from '@fastify/multipart';
 import { env } from './config/env.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { chatRoutes } from './routes/chats.js';
+import { avatarRoutes } from './routes/avatars.js';
+import { messageRoutes } from './routes/messages.js';
+import { groupRoutes } from './routes/groups.js';
+import { settingsRoutes } from './routes/settings.js';
+import { linkPreviewRoutes } from './routes/linkPreview.js';
+import { aiRoutes } from './routes/ai.js';
 import { setupSocketIO } from './lib/socket.js';
 import { sessionManager } from './whatsapp/index.js';
 
@@ -28,10 +36,31 @@ const app = Fastify({
 // Register Cookie plugin for httpOnly authentication tokens
 await app.register(fastifyCookie);
 
+// Allow empty bodies for application/json requests
+app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+  try {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      done(null, {});
+      return;
+    }
+    const json = JSON.parse(body as string);
+    done(null, json);
+  } catch (err) {
+    done(err as Error, undefined);
+  }
+});
+
 // Register Rate Limiting plugin to protect authentication routes
 await app.register(fastifyRateLimit, {
   max: 100,
   timeWindow: '1 minute',
+});
+
+// Register Multipart plugin for file uploads (up to 100MB for documents)
+await app.register(fastifyMultipart, {
+  limits: {
+    fileSize: 100 * 1024 * 1024,
+  },
 });
 
 // Enable CORS headers with credentials for Vite dev server communication
@@ -51,9 +80,16 @@ app.addHook('onRequest', async (request, reply) => {
 await app.register(healthRoutes);
 await app.register(healthRoutes, { prefix: '/api' });
 
-// Register Auth and Session routes under /api
+// Register Auth, Session, Chat, Avatar, and Message routes under /api
 await app.register(authRoutes, { prefix: '/api' });
 await app.register(sessionRoutes, { prefix: '/api' });
+await app.register(chatRoutes, { prefix: '/api' });
+await app.register(avatarRoutes, { prefix: '/api' });
+await app.register(messageRoutes, { prefix: '/api' });
+await app.register(groupRoutes, { prefix: '/api' });
+await app.register(settingsRoutes, { prefix: '/api' });
+await app.register(linkPreviewRoutes, { prefix: '/api' });
+await app.register(aiRoutes, { prefix: '/api' });
 
 // Setup Socket.IO on the underlying HTTP server
 setupSocketIO(app.server);

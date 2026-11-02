@@ -20,8 +20,9 @@ describe('AES-256-GCM Encryption & Decryption', () => {
   it('should throw an error if ciphertext has been tampered with', () => {
     const original = encrypt('confidential credentials');
     const parts = original.split(':');
-    // Tamper with the encrypted payload part
-    parts[2] = parts[2].replace(/a/g, 'b');
+    // Tamper with the encrypted payload part by flipping the first character
+    const flippedChar = parts[2][0] === 'a' ? 'b' : 'a';
+    parts[2] = flippedChar + parts[2].slice(1);
 
     expect(() => decrypt(parts.join(':'))).toThrow();
   });

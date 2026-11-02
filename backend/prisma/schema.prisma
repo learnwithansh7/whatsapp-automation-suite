@@ -1,5 +1,5 @@
 // Prisma schema for WhatsApp Client
-// Multi-account ready architecture: Session & AuthKey models store isolated Baileys auth state
+// Multi-account ready architecture: Session, AuthKey, Contact, Chat, Message, GroupParticipant
 
 generator client {
   provider = "prisma-client-js"
@@ -22,17 +22,25 @@ model AppUser {
 }
 
 model Session {
-  id                    String    @id @default(uuid())
+  id                    String              @id @default(uuid())
   name                  String
   phoneNumber           String?
-  status                String    @default("idle")
-  encryptedCreds        String?   @db.Text
+  status                String              @default("idle")
+  encryptedCreds        String?             @db.Text
   lastConnectedAt       DateTime?
   lastDisconnectReason  String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   authKeys              AuthKey[]
+  contacts              Contact[]
+  chats                 Chat[]
+  messages              Message[]
+  groups                Group[]
+  groupParticipants     GroupParticipant[]
+  reactions             Reaction[]
+  outbox                Outbox[]
+  aiConfig              AiConfig?
 
   @@map("sessions")
 }
@@ -51,4 +59,247 @@ model AuthKey {
   @@unique([sessionId, type, keyId])
   @@index([sessionId])
   @@map("auth_keys")
+}
+
+model Contact {
+  id                      String    @id @default(uuid())
+  sessionId               String
+  jid                     String
+  lid                     String?
+  name                    String?
+  savedName               String?
+  pushName                String?
+  verifiedName            String?
+  phoneNumber             String?
+  profilePictureUrl       String?
+  profilePictureUpdatedAt DateTime?
+  profilePictureStatus    String    @default("none") // none | hidden | ok
+  aboutText               String?   @db.Text
+  aboutUpdatedAt          DateTime?
+  isGroup                 Boolean   @default(false)
+  updatedAt               DateTime  @updatedAt
+  createdAt               DateTime  @default(now())
+
+  session           Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, jid])
+  @@index([sessionId, lid])
+  @@index([sessionId])
+  @@map("contacts")
+}
+
+model Chat {
+  id                String    @id @default(uuid())
+  sessionId         String
+  jid               String
+  type              String    @default("private") // private | group
+  name              String?
+  lastMessageId     String?
+  lastMessageText   String?   @db.Text
+  lastMessageAt     DateTime?
+  lastMessageFromMe Boolean?
+  unreadCount       Int       @default(0)
+  isPinned          Boolean   @default(false)
+  pinnedAt          DateTime?
+  isArchived        Boolean   @default(false)
+  archivedAt        DateTime?
+  isMuted           Boolean   @default(false)
+  mutedUntil        DateTime?
+  markedUnread      Boolean   @default(false)
+  aiEnabled         Boolean   @default(false)
+  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+
+  session           Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messages          Message[]
+
+  @@unique([sessionId, jid])
+  @@index([sessionId, lastMessageAt(sort: Desc)])
+  @@index([sessionId])
+  @@map("chats")
+}
+
+model Message {
+  id                  String    // WhatsApp message ID (key.id)
+  sessionId           String
+  chatJid             String
+  senderJid           String?
+  fromMe              Boolean   @default(false)
+  type                String    @default("text") // text|image|video|audio|document|sticker|location|contact|reaction|system|other
+  text                String?   @db.Text
+  caption             String?   @db.Text
+  mediaMime           String?
+  mediaFileName       String?
+  mediaSize           Int?
+  timestamp           DateTime
+  status              String    @default("delivered") // pending|sent|delivered|read|failed
+  replyToMessageId    String?
+  mediaPath           String?
+  mediaDownloadStatus String    @default("none") // none | pending | done | failed
+  thumbnail           String?   @db.Text
+  durationSeconds     Int?
+  width               Int?
+  height              Int?
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  deletedForEveryone  Boolean   @default(false)
+  hiddenLocally       Boolean   @default(false)
+  isStarred           Boolean   @default(false)
+  editedAt            DateTime?
+  originalText        String?   @db.Text
+  isForwarded         Boolean   @default(false)
+  forwardScore        Int?
+  mentionedJids       Json?
+  raw                 Json?
+
+  session             Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  chat                Chat      @relation(fields: [sessionId, chatJid], references: [sessionId, jid], onDelete: Cascade)
+  reactions           Reaction[]
+
+  @@id([sessionId, chatJid, id])
+  @@unique([sessionId, chatJid, id])
+  @@index([sessionId, chatJid, timestamp(sort: Desc)])
+  @@index([sessionId, timestamp])
+  @@index([sessionId, isStarred])
+  @@map("messages")
+}
+
+model Outbox {
+  id           String    @id @default(uuid())
+  sessionId    String
+  chatJid      String
+  kind         String    // text | image | video | audio | voice | document | react | delete_for_everyone | edit | forward | star
+  payload      Json      // text?, caption?, quotedMessageId?, mediaPath?, mimeType?, fileName?, emoji?, targetMessageId?, etc.
+  status       String    @default("queued") // queued | sending | sent | failed | cancelled
+  attempts     Int       @default(0)
+  lastError    String?   @db.Text
+  scheduledFor DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  sentAt       DateTime?
+  messageId    String?   // WhatsApp message ID after send
+
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status, scheduledFor])
+  @@index([sessionId])
+  @@map("outbox")
+}
+
+model Group {
+  id             String    @id @default(uuid())
+  sessionId      String
+  jid            String
+  subject        String
+  description    String?   @db.Text
+  ownerJid       String?
+  groupCreatedAt DateTime?
+  announceOnly   Boolean   @default(false) // only admins can send
+  restrict       Boolean   @default(false) // only admins edit info
+  pictureUrl     String?
+  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+
+  session        Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, jid])
+  @@index([sessionId])
+  @@map("groups")
+}
+
+model GroupParticipant {
+  id             String   @id @default(uuid())
+  sessionId      String
+  groupJid       String
+  participantJid String
+  role           String   @default("participant") // admin | superadmin | participant
+  displayName    String?
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  session        Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, groupJid, participantJid])
+  @@index([sessionId, groupJid])
+  @@map("group_participants")
+}
+
+model Reaction {
+  id          String   @id @default(uuid())
+  sessionId   String
+  messageId   String
+  chatJid     String
+  reactorJid  String
+  emoji       String
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message     Message  @relation(fields: [sessionId, chatJid, messageId], references: [sessionId, chatJid, id], onDelete: Cascade)
+
+  @@unique([sessionId, chatJid, messageId, reactorJid])
+  @@index([sessionId, chatJid, messageId])
+  @@index([sessionId])
+  @@map("reactions")
+}
+
+model AppSetting {
+  id        String   @id @default(uuid())
+  sessionId String?  @default("global")
+  key       String
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, key])
+  @@map("app_settings")
+}
+
+model LinkPreview {
+  url         String   @id
+  title       String?
+  description String?  @db.Text
+  imageUrl    String?  @db.Text
+  imagePath   String?
+  siteName    String?
+  status      String   @default("pending") // ok | failed | empty
+  fetchedAt   DateTime @default(now())
+
+  @@map("link_previews")
+}
+
+model AiConfig {
+  id                 String   @id @default(uuid())
+  sessionId          String   @unique
+  isEnabled          Boolean  @default(true)
+  minDelaySec        Int      @default(8)   // Min think/reading delay (seconds)
+  maxDelaySec        Int      @default(14)  // Max think/reading delay (seconds)
+  cooldownMin        Int      @default(20)  // Per-contact cooldown in minutes
+  dailyLimit         Int      @default(50)  // Max auto-replies per 24 hours
+  developerBio       String?  @db.Text
+  youtubeUrl         String?
+  youtubeSubs        String?
+  instagramUrl       String?
+  googleMeetMessage  String?  @db.Text
+  fallbackMessage    String?  @db.Text
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  session            Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("ai_configs")
+}
+
+model AiReplyLog {
+  id           String   @id @default(uuid())
+  sessionId    String
+  chatJid      String
+  incomingText String   @db.Text
+  replyText    String   @db.Text
+  intent       String   @default("general") // intro | youtube | meet | social | fallback
+  delaySeconds Int      @default(10)
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, chatJid, createdAt])
+  @@index([sessionId, createdAt])
+  @@map("ai_reply_logs")
 }

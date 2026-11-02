@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -7,6 +8,7 @@ export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   name?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   status?: 'online' | 'offline' | 'busy';
+  isGroup?: boolean;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -15,10 +17,18 @@ export const Avatar: React.FC<AvatarProps> = ({
   name,
   size = 'md',
   status,
+  isGroup = false,
   className,
   ...props
 }) => {
   const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // Reset error & loaded status when src prop updates
+  useEffect(() => {
+    setImgError(false);
+    setImgLoaded(false);
+  }, [src]);
 
   const sizeClasses = {
     sm: 'w-7 h-7 text-xs',
@@ -49,7 +59,7 @@ export const Avatar: React.FC<AvatarProps> = ({
     return text.substring(0, 2).toUpperCase();
   };
 
-  const hasImage = src && !imgError;
+  const hasImage = !!src && !imgError;
 
   return (
     <div
@@ -64,9 +74,15 @@ export const Avatar: React.FC<AvatarProps> = ({
         <img
           src={src}
           alt={alt || name || 'Avatar'}
+          onLoad={() => setImgLoaded(true)}
           onError={() => setImgError(true)}
-          className="w-full h-full object-cover"
+          className={cn(
+            'w-full h-full object-cover transition-opacity duration-fast',
+            imgLoaded ? 'opacity-100' : 'opacity-0',
+          )}
         />
+      ) : isGroup ? (
+        <Users className="w-1/2 h-1/2 text-text-muted stroke-[1.75]" />
       ) : (
         <span>{getInitials(name || alt)}</span>
       )}
