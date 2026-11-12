@@ -302,8 +302,9 @@ export class AiResponderService {
   ): Promise<void> {
     // 1. Safety check: Never reply to own messages
     if (message.fromMe) {
-      // User sent a message from their phone -> cancel any queued auto-reply
+      // User sent a message from their phone or web app -> cancel any queued auto-reply
       this.cancelPendingReply(chatJid);
+      console.log(`[AiResponder] Skipping ${chatJid}: message was sent by self (fromMe=true). AI only auto-replies to incoming messages from other contacts.`);
       return;
     }
 
@@ -315,22 +316,49 @@ export class AiResponderService {
     // 3. Safety check: Extract incoming text
     const incomingText = (message.text || message.caption || '').trim();
     if (!incomingText) {
+      console.log(`[AiResponder] Skipping ${chatJid}: message contains no text or caption.`);
       return;
     }
 
     // 4. Safety check: Check if Chat has aiEnabled === true in database
-    const chat = await prisma.chat.findUnique({
+    let chat = await prisma.chat.findUnique({
       where: { sessionId_jid: { sessionId, jid: chatJid } },
       select: { aiEnabled: true },
     });
 
+    // Check alternate contact mapping (e.g. if chatJid is LID but phone chat was toggled, or vice-versa)
     if (!chat || !chat.aiEnabled) {
+      const contact = await prisma.contact.findFirst({
+        where: {
+          sessionId,
+          OR: [{ jid: chatJid }, { lid: chatJid }],
+        },
+        select: { jid: true, lid: true },
+      });
+
+      if (contact) {
+        const alternateJid = contact.jid === chatJid ? contact.lid : contact.jid;
+        if (alternateJid) {
+          const alternateChat = await prisma.chat.findUnique({
+            where: { sessionId_jid: { sessionId, jid: alternateJid } },
+            select: { aiEnabled: true },
+          });
+          if (alternateChat?.aiEnabled) {
+            chat = alternateChat;
+          }
+        }
+      }
+    }
+
+    if (!chat || !chat.aiEnabled) {
+      console.log(`[AiResponder] Skipping ${chatJid}: AI Auto-Reply is turned OFF for this chat. Toggle it ON in the chat header ([🤖 AI: ON]) or contact info panel.`);
       return; // Not enabled for this chat
     }
 
     // 5. Safety check: Check session AI master config
     const config = await this.getConfig(sessionId);
     if (!config.isEnabled) {
+      console.log(`[AiResponder] Skipping ${chatJid}: AI Master Toggle is disabled in Settings.`);
       return;
     }
 

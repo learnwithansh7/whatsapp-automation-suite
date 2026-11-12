@@ -81,6 +81,7 @@ export class MergeService {
           data: {
             unreadCount: (phoneChat.unreadCount || 0) + (lidChat.unreadCount || 0),
             isPinned: phoneChat.isPinned || lidChat.isPinned,
+            aiEnabled: phoneChat.aiEnabled || lidChat.aiEnabled,
             isArchived: phoneChat.isArchived && lidChat.isArchived,
             isMuted: phoneChat.isMuted || lidChat.isMuted,
             ...(useLidLatest
@@ -117,6 +118,7 @@ export class MergeService {
           isPinned: lidChat.isPinned,
           isArchived: lidChat.isArchived,
           isMuted: lidChat.isMuted,
+          aiEnabled: lidChat.aiEnabled,
         },
       });
 
