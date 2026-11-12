@@ -1,277 +1,269 @@
-# Custom WhatsApp Client (Web App) - Monorepo
+# WhatsApp Web Client
 
-A private, extensible WhatsApp Web client linked via Baileys with multi-account ready schema, AES-256-GCM database session storage, Socket.IO real-time QR pairing, Clean Light UI, persistent anti-ban send queue, voice notes via FFmpeg, and media viewing/downloading.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/message-square-text.svg" width="64" height="64" alt="WhatsApp Client Logo" />
+</p>
+
+<p align="center">
+  <strong>A modern, privacy-first WhatsApp Web client and personal concierge built with Baileys, Node.js, Fastify, React, Vite, Tailwind CSS, and PostgreSQL.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-20+-68a063?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
+  <img src="https://img.shields.io/badge/TypeScript-5.6-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Fastify-4.28-black?style=flat-square&logo=fastify&logoColor=white" alt="Fastify" />
+  <img src="https://img.shields.io/badge/React-18.3-61dafb?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/TailwindCSS-3.4-38bdf8?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Prisma-5.22-2D3748?style=flat-square&logo=prisma&logoColor=white" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Vitest-101%20Tests%20Passed-729B1B?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License" />
+</p>
 
 ---
 
-## Architecture Overview (Phase 3)
+## Highlights & Features
+
+- **Linked Device Authentication**: QR code pairing and phone-number pairing code via Baileys multi-device protocol (`@whiskeysockets/baileys`).
+- **Encrypted Session Storage**: Multi-device credentials, encryption keys, and app state are encrypted at rest with **AES-256-GCM** inside PostgreSQL.
+- **Clean Light & Dark Design**: Polished design system modeled after modern WhatsApp Web with custom CSS design tokens, responsive layouts, and density modes (Comfortable vs Compact).
+- **Anti-Ban Outbox Queue**: All outgoing messages, reactions, edits, and revokes are enqueued into an Outbox worker with human-like jitter delays (1.5s–3.5s) and sliding-window rate limits (20/min, 300/hour).
+- **Zero-API AI Auto-Reply Concierge**:
+  - **Human Simulation**: 8–14 second reading delay + 2.5–6.5 second typing simulation (`composing` state).
+  - **Auto-Cancellation**: Immediately aborts auto-reply if you reply manually from your phone.
+  - **Privacy First**: 100% local intent matching — zero external API keys, zero cloud LLM data leaks.
+  - **Customizable Knowledge Base**: Answers identity questions (*"Who are you?"*), YouTube channel links & subscriber counts, Google Meet scheduling, and socials directly from your Settings config.
+  - **Anti-Ban Safety**: Off by default, enabled per-chat; permanently blocked for group chats (`@g.us`).
+- **Rich Media & Voice Notes**:
+  - Drag-and-drop & clipboard paste for images, videos, audio, and documents.
+  - Voice recording in-browser converted server-side to WhatsApp-compliant OGG/Opus mono 16 kHz via bundled `ffmpeg-static`.
+  - Full-screen lightbox viewer (`MediaLightbox`) and custom waveform audio player (`AudioPlayer`).
+- **Group Chats**:
+  - Participant rosters with admin & superadmin badges.
+  - `@` autocomplete mention pills (`contextInfo.mentionedJid`).
+  - Announce-only restriction enforcement (read-only for non-admins).
+- **Message Actions**:
+  - 6 quick emoji reactions + custom emoji picker with tap-to-remove.
+  - Quoted replies with instant jump-to-message.
+  - Star / unstar messages with a global modal viewer.
+  - Edit text messages within 15 minutes.
+  - Delete for Me and Delete for Everyone (revoke).
+  - **Anti-Revoke**: Preserves messages and media deleted by the sender with a visual deleted badge.
+- **Chat Management**:
+  - Pin up to 3 priority chats.
+  - Archive chats with instant undo toast.
+  - Mute notifications (8 hours, 1 week, always).
+  - Mark as unread badge.
+  - Dynamic filter tabs (All, Unread, Groups, Archived).
+- **Contact & Group Info Drawer**:
+  - High-res avatars, phone numbers, verified badges, and lazily fetched status texts (7-day cache).
+  - Shared media explorer (Media grid, Docs list, Links list, Starred messages).
+  - SSRF-safe OpenGraph link preview generator.
+
+---
+
+## Project Structure
 
 ```
-D:\whatsapp-client\
-├── backend\
-│   ├── prisma\             # Prisma Schema (Outbox, Message, Chat, Contact, Session)
-│   ├── storage\
-│   │   └── media\          # Local media files: /storage/media/{sessionId}/{uuid}{ext}
-│   ├── src\
-│   │   ├── config\         # Zod validated env vars & anti-ban / media thresholds
-│   │   ├── routes\         # REST API routes (messages, media stream, chats, sessions, contacts)
-│   │   ├── services\       # Outbox queue, Media storage, Mime detector, Voice converter, Thumbnails
-│   │   └── whatsapp\       # Baileys session manager, name resolver, avatar queue, merge service
-├── frontend\               # React 18 + Vite + Tailwind CSS (Clean Light) + TanStack Query + Zustand
-│   ├── src\components\chat # MessageBubble, MessageInput, MediaLightbox, AudioPlayer
-├── ai-service\             # Python FastAPI placeholder (Phase 4+)
-├── infra\                  # docker-compose.yml (PostgreSQL + Redis optional infra config)
-├── .env.example            # Documented environment variables template
-├── .gitignore              # Git ignore rules ensuring no secrets, credentials, or media are tracked
-└── README.md               # Setup, operational guide, and test checklists
+whatsapp-client/
+├── backend/
+│   ├── prisma/             # Database schema & migrations (Sessions, Messages, Chats, Outbox, AI)
+│   ├── src/
+│   │   ├── config/         # Zod-validated environment config
+│   │   ├── routes/         # REST API endpoints (sessions, chats, messages, groups, ai, settings)
+│   │   ├── services/       # Outbox queue, AI responder, voice converter, link preview, avatar queue
+│   │   └── whatsapp/       # Baileys session manager, message parser, name resolver, merge service
+│   ├── storage/            # Local media, avatar, and preview caches (ignored in Git)
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # Chat bubbles, message input, audio player, lightbox, modals
+│   │   ├── store/          # Zustand UI & toast state management
+│   │   ├── views/          # ChatsView, SettingsView, ConnectionView, LoginView
+│   │   └── styles/         # Clean Light tokens & Tailwind configuration
+│   └── package.json
+├── infra/                  # Docker Compose configuration (PostgreSQL 16 + Redis)
+├── .env.example            # Root environment template
+├── .gitignore              # Strict ignore rules (no secrets, credentials, or media)
+├── CONTRIBUTING.md         # Guidelines for contributors
+├── SECURITY.md             # Security architecture & vulnerability reporting
+└── LICENSE                 # MIT License
 ```
 
 ---
 
 ## Prerequisites
 
-1. **Node.js**: `v20.0.0` or newer LTS (tested with Node `22.x`)
-2. **Package Manager**: `npm` (tested with `10.9.x`)
-3. **PostgreSQL**: Native PostgreSQL 16 (or Docker container) running on port `5432`
-4. **Redis**: Optional (Send queue runs on PostgreSQL Outbox table with `ISendQueue` interface; drop-in ready for BullMQ)
-5. **FFmpeg**: Automatically provided via `ffmpeg-static` (cross-platform binary including Windows `ffmpeg.exe`)
+- **Node.js**: `v20.0.0` or newer (LTS recommended)
+- **Package Manager**: `npm` (v10+)
+- **PostgreSQL**: Native PostgreSQL 16 (or Docker container) running on port `5432`
+- **FFmpeg**: Bundled automatically via `ffmpeg-static` (no external installation required)
 
 ---
 
-## Environment Variables (`backend/.env`)
+## Quickstart Setup
 
-Ensure `backend/.env` has the following variables populated:
+### 1. Clone the Repository
 
-```env
-NODE_ENV=development
-PORT=3000
-HOST=127.0.0.1
+```bash
+git clone https://github.com/<your-username>/whatsapp-client.git
+cd whatsapp-client
+```
 
-# PostgreSQL connection string
-DATABASE_URL="postgresql://postgres:<PASSWORD>@localhost:5432/whatsapp_client?schema=public"
+### 2. Configure Environment Variables
 
-# 32-byte AES-256-GCM encryption key (Base64)
-# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-ENCRYPTION_KEY="your_base64_encoded_32_byte_key_here="
+Copy the example environment files for both backend and frontend:
 
-# JWT Secret for dashboard session cookies
-JWT_SECRET="your_secure_jwt_secret_here"
+```bash
+# In the repository root
+cp .env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
 
-# Auth toggle (false for local dev single-user mode)
-AUTH_ENABLED=false
+Generate a secure 32-byte Base64 encryption key for session data:
 
-# ---------------------------------------------------------------------------
-# Phase 3: Anti-Ban & Sending Rate Limits
-# ---------------------------------------------------------------------------
-# Jitter delay between consecutive message sends (ms)
-SEND_MIN_DELAY_MS=1500
-SEND_MAX_DELAY_MS=3500
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
 
-# Rate limits (sliding window)
-SEND_MAX_PER_MINUTE=20
-SEND_MAX_PER_HOUR=300
+Open `backend/.env` and update:
+- `DATABASE_URL`: Your PostgreSQL connection string.
+- `ENCRYPTION_KEY`: The 32-byte Base64 key generated above.
+- `JWT_SECRET`: Any random string (minimum 32 characters).
+- `AUTH_ENABLED`: Keep `false` for single-user local development.
 
-# ---------------------------------------------------------------------------
-# Phase 3: Media File Size Limits (MB)
-# ---------------------------------------------------------------------------
-MAX_IMAGE_SIZE_MB=16
-MAX_VIDEO_SIZE_MB=64
-MAX_DOCUMENT_SIZE_MB=100
-MAX_AUDIO_SIZE_MB=16
-AUTO_DOWNLOAD_VIDEO_MAX_MB=15
+### 3. Run Database Migrations
 
-# Default read receipts behavior (true = blue ticks sent to WhatsApp; false = local read only)
-SEND_READ_RECEIPTS=false
+```bash
+cd backend
+npm install
+npx prisma migrate dev
+```
+
+### 4. Install Frontend Dependencies
+
+```bash
+cd ../frontend
+npm install
 ```
 
 ---
 
-## First-Time Setup & Migrations
+## Running Locally
 
-```powershell
-# In D:\whatsapp-client\backend
-npm run prisma:migrate
-```
+Open two terminal windows:
 
----
-
-## Running the Application
-
-Open two PowerShell terminals:
-
-### Terminal 1: Backend API (Port 3000)
-```powershell
-cd D:\whatsapp-client\backend
+### Terminal 1: Backend API Server
+```bash
+cd backend
 npm run dev
 ```
-*Health endpoint live at: [http://localhost:3000/api/health](http://localhost:3000/api/health)*
+*Backend runs at [http://127.0.0.1:3000](http://127.0.0.1:3000) (Health check: `/api/health`)*
 
-### Terminal 2: Frontend Web App (Port 5173)
-```powershell
-cd D:\whatsapp-client\frontend
+### Terminal 2: Frontend Web App
+```bash
+cd frontend
 npm run dev
 ```
-*Web dashboard live at: [http://localhost:5173](http://localhost:5173)*
+*Frontend runs at [http://localhost:5173](http://localhost:5173)*
+
+### Linking Your WhatsApp Account
+
+1. Open [http://localhost:5173](http://localhost:5173) in your browser.
+2. Select your session and click **Connect**.
+3. Scan the displayed QR code with your phone via **WhatsApp > Linked Devices > Link a Device**.
+4. Once paired, your conversations and contacts will sync in real time.
+
+---
+
+## Running with Docker (Optional Infra)
+
+If you prefer running PostgreSQL and Redis via Docker:
+
+```bash
+cd infra
+docker compose up -d
+```
+
+This starts:
+- **PostgreSQL 16** on `127.0.0.1:5432`
+- **Redis 7** on `127.0.0.1:6379`
 
 ---
 
 ## Running Automated Tests
 
-```powershell
-cd D:\whatsapp-client\backend
+The backend includes a comprehensive Vitest test suite covering encryption, message parsing, name resolution, contact merging, outbox anti-ban algorithms, and AI intent matching:
+
+```bash
+cd backend
 npm test -- --run
 ```
-*Executes 73 unit tests across 8 test suites covering AES-256-GCM encryption, Baileys event parsing, disconnect handling, name resolution, contact merging, magic bytes MIME detection, Outbox queue anti-ban algorithms, and Phase 4A Groups & Message Actions.*
+
+All 101 unit tests across 10 test suites run in ~3.5 seconds.
 
 ---
 
-## Phase 4A Features (Groups & Message Actions)
+## AI Auto-Reply & Anti-Ban Architecture
 
-### 1. Group Chats
-- **Group Metadata Sync**: Synchronizes subject, description, owner, creation date, announce-only (`announceOnly`), and restriction policies on connect and live updates (`groups.upsert`, `groups.update`).
-- **Participant Roster & Admin Status**: Tracks all members with admin / superadmin badges, phone numbers, and profile pictures. Reconciled in real-time via `group-participants.update`.
-- **Announce-Only Protection**: If a group is announce-only (`announceOnly === true`) and the user is not an admin, message input is disabled with a clear explanation and sending is rejected at the API level (403 `ANNOUNCE_ONLY`).
-- **Group Mentions (`@`)**: Typing `@` triggers an autocomplete dropdown of group participants. Messages are sent with `contextInfo: { mentionedJid: [...] }` and rendered as highlighted mention pills.
-- **Group Sender Identity**: Each group participant's message displays an avatar, formatted contact/phone name, and a consistent deterministic color.
+```
+Incoming WhatsApp Message
+         │
+         ▼
+[Ingestion Service] ─── Is AI enabled for this chat? (1-on-1 only, never @g.us)
+         │ Yes
+         ▼
+[AI Responder] ──────── Randomized 8–14s Human Reading Delay
+         │ (Aborts if you send a manual message during delay)
+         ▼
+[Typing Simulator] ──── Sends 'composing' presence for 2.5–6.5s
+         │
+         ▼
+[Intent Matcher] ────── Local zero-API matching:
+         ├─ Identity / Bio ("Who are you?")
+         ├─ YouTube ("Channel link & subs")
+         ├─ Meeting ("Schedule Google Meet")
+         ├─ Socials ("Instagram & links")
+         └─ Polite Away Fallback
+         │
+         ▼
+[Outbox Queue] ──────── Random jitter (1.5–3.5s) & Rate Limits (20/min, 300/hr)
+         │
+         ▼
+WhatsApp Recipient
+```
 
-### 2. Message Actions & Anti-Ban Rate Limiting
-All outgoing actions are enqueued into PostgreSQL `Outbox` table and processed with human-like jitter delays and sliding-window rate limits:
-- **Reactions**: 6 quick emoji shortcuts (`👍`, `❤️`, `😂`, `😮`, `😢`, `🙏`) plus custom emoji picker. Grouped reactions bar displays under each bubble with tap-to-remove.
-- **Reply**: Quotes the original message with an inline preview and jumps to the referenced message.
-- **Copy**: One-click clipboard copy of message text or caption.
-- **Forward**: Forward dialog allowing multi-select up to 5 chats with search. Sent with WhatsApp standard forwarding context.
-- **Star / Unstar**: Bookmark messages for quick retrieval. Global Starred Messages modal (`StarredMessagesModal`) with direct jump-to-chat.
-- **Edit Message**: Allows editing own text messages within 15 minutes. Shows "Edited" indicator with timestamp and stores original text. Up-Arrow in the input box automatically triggers editing the last sent message.
-- **Delete for Me**: Instantly hides the message locally without affecting other participants.
-- **Delete for Everyone**: Revokes message from WhatsApp within the ~48-hour protocol window. Displays placeholder `You deleted this message` / `This message was deleted`.
-- **Anti-Revoke (Preserve Deleted Messages)**: When another person sends a message or media and deletes it for everyone (`REVOKE`), the client preserves the original content, photo, or audio file and displays an explicit banner: `🚫 Deleted by sender at [hh:mm]` with a subtle rose highlight. Can be toggled on/off in **Settings**.
+---
 
-### 3. Baileys Supported vs Unsupported Protocol Limitations
+## WhatsApp Protocol Limitations Matrix
+
 | Feature | Supported via Baileys 6.7.24 | Protocol Restriction / Limitation |
-| :--- | :--- | :--- |
-| **Reactions** | ✅ `sock.sendMessage(jid, { react: { text, key } })` | Empty text `""` removes existing reaction. |
-| **Delete for Everyone** | ✅ `sock.sendMessage(jid, { delete: key })` | Own messages only; WhatsApp rejects revoke older than ~48h. |
-| **Edit Message** | ✅ `sock.sendMessage(jid, { text, edit: key })` | Text messages only; strictly within 15 minutes of sending. Media captions cannot be edited on WhatsApp protocol. |
-| **Forward Message** | ✅ `sock.sendMessage(jid, { forward: msg, contextInfo })` | Max 5 chats per forward as per WhatsApp anti-spam rules. |
-| **Star / Unstar** | ✅ `sock.star(jid, [{ id, fromMe }], boolean)` | Synced via Baileys app patch (`chatModify.star`). |
-| **Mentions** | ✅ `contextInfo: { mentionedJid: [...] }` | Recipient client highlights JIDs listed in `mentionedJid`. |
-| **Announce-Only** | ✅ `groupMetadata.announce` | Non-admin sends are rejected by WhatsApp servers. |
+| :--- | :---: | :--- |
+| **Reactions** | ✅ | Sending empty text `""` removes existing reaction. |
+| **Delete for Everyone** | ✅ | Revokes own messages within ~48 hours. |
+| **Edit Message** | ✅ | Text messages only; strictly within 15 minutes of sending. |
+| **Forward Message** | ✅ | Max 5 chats per forward as per WhatsApp anti-spam rules. |
+| **Star / Unstar** | ✅ | Synced via Baileys app patch (`chatModify.star`). |
+| **Group Mentions** | ✅ | Recipient client highlights JIDs listed in `mentionedJid`. |
+| **Announce-Only** | ✅ | Non-admin sends are rejected by WhatsApp servers. |
+| **Read Receipts** | ✅ | Configurable; turn OFF in Settings for stealth reading. |
 
 ---
 
-## Phase 3 Features
+## Security & Privacy Notice
 
-### 1. Persistent Outbox Queue & Anti-Ban Safety
-- Messages are saved directly to the PostgreSQL `Outbox` table with status `pending`.
-- Outbox worker picks messages FIFO per session with safe human-like behavior:
-  - **Random Jitter Delay**: 1.5s to 3.5s delay between messages.
-  - **Composing Presence**: Sends `composing` typing state before sending text (proportional to message length, max 4s).
-  - **Rate Limits**: Enforces 20 messages/minute and 300 messages/hour. Emits `queue.ratelimit` warnings to frontend.
-  - **Automatic Retries**: Up to 2 retries on transient network failures with exponential backoff (10s, 30s) before marking as `failed`.
-  - **Queue Pause on Disconnect**: Automatically pauses processing when WhatsApp disconnects, resumes on reconnection.
-
-### 2. Rich Media Sending & Receiving
-- **Images & Videos**: Supported with client-side drag-and-drop, clipboard paste, caption support, inline preview, and full-screen lightbox viewer (`MediaLightbox`).
-- **Voice Notes (PTT)**:
-  - Recorded directly in browser using Web Audio / MediaRecorder.
-  - Converted server-side via bundled `ffmpeg-static` to WhatsApp-compatible OGG/Opus mono 16 kHz.
-  - Sent with `ptt: true` and synthetic waveform bars.
-  - Custom audio player (`AudioPlayer`) with duration formatting, playback controls, and scrub bar.
-- **Documents & Audio**: Dedicated attachment options with file size checks, extension/MIME validation, and download links.
-
-### 3. Read Receipts Control
-- Toggle in **Settings** (`Send Read Receipts (Blue Ticks)`).
-- When OFF (default): Reading a chat marks messages read locally in PostgreSQL without sending read receipts back to WhatsApp.
-- When ON: Sends `readMessages` update to WhatsApp via Baileys, updating blue ticks for the sender.
+- **Never Commit `.env` Files**: Your `.env` contains database credentials and encryption keys. The `.gitignore` is preconfigured to ignore all `.env` files except `.env.example`.
+- **Local Storage**: All media and cached avatars reside in `backend/storage/`, which is ignored by Git.
+- **Anti-Ban Notice**: This client is designed for personal productivity and authorized communications. Do not use this software for bulk messaging, unsolicited marketing, or spam. Adhere to WhatsApp's Terms of Service.
 
 ---
 
-## Phase 4B Features (Chat List Tools, Info Panel & Polish)
+## License
 
-### 1. Chat List Organization & Actions
-- **Pin Chats**: Pin up to 3 priority conversations to the top of the chat list. Synced with phone via Baileys `sock.chatModify({ pin: true }, jid)`. Enforces strict max 3 validation with toast alert.
-- **Archive Chats**: Archive conversations to separate them from active chats. Synced with phone via `sock.chatModify({ archive: true }, jid)`. Features quick "Undo" action toast.
-- **Mute Notifications**: Mute chats for **8 Hours**, **1 Week**, or **Always**. Synced with phone via `sock.chatModify({ mute: timestamp }, jid)`. Muted badge uses subtle grey styling.
-- **Mark as Unread**: Mark any chat unread with a green dot badge. Clearly tagged with a `Local only` indicator in the context menu and info panel.
-- **Filter Tabs**: Instant filtering by **All**, **Unread**, **Groups**, and **Archived** with unread count badges dynamically calculated per tab.
-- **Archived View**: Dedicated view with back arrow to return to active conversations.
-- **Context Menu**: Accessible via right-click on any chat row or hovering over the 3-dot action button.
-- **Layout Density**: Switch between **Comfortable** (default 44px avatars, generous padding) and **Compact** (36px avatars, condensed row spacing for power users).
-
-### 2. Contact & Group Info Panel
-- Click chat header or info icon (`i`) to slide open the side info drawer.
-- **Contact Details**: High-resolution avatar, phone number with one-click copy, verified business badge, and About status text (lazily fetched via `sock.fetchStatus` and cached for 7 days).
-- **Group Details**: Group subject, description, creation date, admin roster, and member participant count.
-- **Shared Media Explorer** (with cursor pagination and skeleton loaders):
-  - **Media Grid**: Visual 3-column photo and video thumbnails with direct click-to-lightbox viewer.
-  - **Docs List**: List of shared documents and PDFs with file size and timestamp.
-  - **Links List**: URLs shared in the conversation paired with SSRF-safe rich link preview cards.
-  - **Starred Messages**: Bookmarked messages with 1-click jump-to-chat.
-
-### 3. SSRF-Safe Link Previews
-- Automatic server-side OpenGraph and metadata extraction for URLs shared in messages.
-- **SSRF Defense**:
-  - Resolves domain via DNS and strictly blocks IPv4 private/loopback/carrier-grade ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `100.64.0.0/10`) and IPv6 loopback/unique-local/link-local (`::1`, `fe80::`, `fc00::`).
-  - 5-second connection timeout, max 3 redirects, and 1 MB streaming download cap.
-  - Cached for 7 days in PostgreSQL `LinkPreview` table and image assets saved to `storage/previews/`.
-  - Rate-limited to max 1 preview fetch per 2 seconds.
-
-### 4. Settings View & Preferences
-- **Appearance**:
-  - Theme: **Clean Light**, **Dark Mode**, or **System** (respects `prefers-color-scheme`).
-  - Chat List Density: **Comfortable** vs **Compact**.
-  - Chat Wallpaper: **Plain** (solid neutral), **Subtle Pattern** (WhatsApp doodle), or **Soft Tint** (emerald undertone).
-- **Chat Behavior**:
-  - **Enter to Send**: Toggle between Enter-sends vs Shift+Enter-sends (multiline default).
-  - **Send Read Receipts**: Default OFF.
-  - **Show Link Previews**: Toggle rendering of rich preview cards.
-  - **Anti-Revoke**: Keep deleted messages.
-- **Account Connection**:
-  - Linked phone number, connection state badge, and direct button to Connection view.
-- **About & Storage**:
-  - Versions: App version `0.4.2`, pinned Baileys engine `6.7.24`, Node.js runtime.
-  - Storage breakdown: Media files (MB), Profile avatars (MB), Link preview images (MB), Outbox queue size.
-  - **Clear Cache Action**: One-click cleanup of cached avatars and link previews without affecting messages or media.
-
-### 5. Keyboard Navigation (`?`)
-- Press `?` anywhere to open the shortcuts cheat sheet modal.
-- `Esc`: Close open modal, lightbox, context menu, or cancel reply/edit.
-- `Ctrl + Shift + P`: Toggle pin on active chat.
-- `Ctrl + Shift + A`: Toggle archive on active chat.
-- `↑` / `↓`: Navigate up and down across the chat list.
-- `Enter`: Select focused chat from list.
-- `Shift + Enter`: New line in message input.
-
-### 6. WhatsApp Sync vs Local Only Status Matrix
-| Action | Syncs with Phone? | Baileys Implementation | UI Indication |
-| :--- | :---: | :--- | :--- |
-| **Pin / Unpin** | ✅ Yes (Max 3) | `sock.chatModify({ pin: boolean }, jid)` | Pin icon; rejects > 3 with toast |
-| **Archive / Unarchive** | ✅ Yes | `sock.chatModify({ archive: boolean, lastMessages }, jid)` | Filtered to Archived tab; Undo toast |
-| **Mute / Unmute** | ✅ Yes | `sock.chatModify({ mute: number \| null }, jid)` | Mute icon; grey badge styling |
-| **Mark as Unread** | ⚠️ Local Only | Stored in PostgreSQL `markedUnread`; attempted app-state sync | Green dot badge; labeled `Local only` |
-| **Contact About Status** | ✅ Yes | `sock.fetchStatus(jid)` via USyncQuery | Rendered in Info Panel with 7d cache |
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-## Phase 5 Features (AI Auto-Reply & Anti-Ban Concierge)
+## Disclaimer
 
-### 1. Anti-Ban Human Simulation Pipeline
-- **10-Second Human Reading Delay**: When a message arrives in an AI-enabled chat, the bot pauses for **8 to 14 seconds (randomized jitter centered around ~10s)** before taking action, simulating a real person picking up their phone and reading.
-- **Dynamic Typing Simulation**: Sends `sock.sendPresenceUpdate('composing', chatJid)` and keeps it active for **2.5 to 6.5 seconds** proportional to message length (~40 WPM), then switches to `paused`.
-- **Manual Reply Cancellation**: If the user sends a manual message from their phone (`fromMe === true`) while the 10-second timer is pending, the auto-reply is **aborted immediately** to avoid awkward double-replies.
-- **Outbox Queue Routing**: All generated messages pass through the existing PostgreSQL `Outbox` queue with anti-ban sliding-window rate limits (max 20/min, 300/hour).
-
-### 2. Zero-API Intent & Profile Matcher
-Requires **no external API keys**, costs $0, has zero downtime risk, and never hallucinates:
-- **Developer & YouTuber Bio**: When asked *"Who are you?"*, *"What do you do?"*, *"Aap kaun ho?"*, or *"Introduce yourself"*, answers with your customized developer bio, YouTube channel link, and subscriber milestone.
-- **YouTube & Subscriber Stats**: When asked for *"yt link"*, *"channel link"*, *"how many subs"*, answers with your direct YouTube URL and current subscriber count.
-- **Google Meet & Call Scheduling**: When asked *"Can we book a Google Meet?"*, *"Let's have a call"*, answers with your custom scheduling message (*"Wait, let me check my schedule and I will get back to you shortly with an available time slot!"*).
-- **Instagram & Socials**: Answers queries asking for your Instagram or social media profiles.
-- **Polite Away Fallback**: For complex or out-of-scope inquiries, politely informs the sender that you are away from your desk and will reply personally soon.
-
-### 3. Safety Guardrails & Controls
-- **Specific Chats Only**: Disabled globally by default. You selectively activate AI auto-reply on specific 1-on-1 chats via the `AI: ON / OFF` pill in the chat header, the context menu, or the Contact Info drawer.
-- **Strict Group Protection**: AI auto-replies are **permanently disabled in group chats (`@g.us`)** and broadcast channels.
-- **Per-Contact Cooldown**: Enforces a 20-minute cooldown (configurable in Settings) so contacts cannot spam or loop the auto-reply.
-- **Daily Volume Cap**: Enforces a strict daily limit (default 50 replies/24h) to stay well under WhatsApp abuse thresholds.
-- **Settings UI**: Complete knowledge base editor in Settings to customize your bio, YouTube link, subscriber count, Instagram handle, and delay parameters.
+This project is not affiliated, associated, authorized, endorsed by, or in any way officially connected with WhatsApp, Meta, or any of their subsidiaries or affiliates. The official WhatsApp website can be found at [https://whatsapp.com](https://whatsapp.com).

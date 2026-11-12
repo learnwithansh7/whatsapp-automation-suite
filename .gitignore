@@ -1,3 +1,7 @@
+# ==============================================================================
+# WhatsApp Client - Git Ignore Rules
+# ==============================================================================
+
 # Dependencies
 node_modules/
 .pnp
@@ -6,23 +10,30 @@ node_modules/
 # Production build outputs
 dist/
 build/
+out/
 .next/
 
-# Environment files and credentials
+# Environment variables & Secret Keys
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
 *.pem
+*.key
+*.cert
+*.crt
 
-# Database & Infra bind-mounts
+# Database & Infrastructure Bind-Mounts
 infra/data/
 postgres/
 redis/
 *.sqlite
 *.sqlite-journal
+*.db
+*.db-journal
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -30,26 +41,41 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Editor directories and files
+# Test & Coverage Outputs
+coverage/
+.vitest-cache/
+.nyc_output/
+
+# Editor & IDE Directories
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-.idea
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swo
 
-# OS generated files
+# OS & File System Artifacts
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# WhatsApp session data (reserved for Phase 1 Baileys auth tokens)
+# WhatsApp Baileys Local Auth & Session Dumps
 whatsapp-sessions/
 auth_info_baileys/
 *.auth
+*.session
 
-# Local media, avatars, and preview storage
+# Local Uploads, Media, Avatars, and Preview Caches
 backend/storage/
 storage/
+tmp/
+temp/

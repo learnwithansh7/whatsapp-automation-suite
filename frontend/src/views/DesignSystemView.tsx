@@ -313,7 +313,7 @@ export const DesignSystemView: React.FC = () => {
               </CardHeader>
               <CardContent className="flex flex-col gap-5">
                 <div className="flex items-center gap-3">
-                  <Avatar name="Anirudh" size="sm" status="online" />
+                  <Avatar name="Alex Morgan" size="sm" status="online" />
                   <Avatar name="Sarah Connor" size="md" status="busy" />
                   <Avatar name="Dev Team" size="lg" status="offline" />
                   <Avatar name="WhatsApp System" size="xl" />
