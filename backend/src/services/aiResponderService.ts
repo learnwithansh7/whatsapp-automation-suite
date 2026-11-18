@@ -34,6 +34,8 @@ export class AiResponderService {
   private getSocketFn: ((sessionId: string) => WASocket | null) | null = null;
   // Track active pending timers so if user replies manually from phone, we cancel the auto-reply
   private pendingReplies = new Map<string, NodeJS.Timeout>();
+  // Track recently sent AI responses to avoid echoing our own bot messages
+  private recentAiSentTexts = new Set<string>();
 
   public setSocketGetter(fn: (sessionId: string) => WASocket | null) {
     this.getSocketFn = fn;
@@ -300,27 +302,61 @@ export class AiResponderService {
     chatJid: string,
     message: { id: string; fromMe: boolean; text?: string | null; caption?: string | null },
   ): Promise<void> {
-    // 1. Safety check: Never reply to own messages
-    if (message.fromMe) {
-      // User sent a message from their phone or web app -> cancel any queued auto-reply
-      this.cancelPendingReply(chatJid);
-      console.log(`[AiResponder] Skipping ${chatJid}: message was sent by self (fromMe=true). AI only auto-replies to incoming messages from other contacts.`);
-      return;
-    }
-
-    // 2. Safety check: NEVER auto-reply in groups or broadcast status
+    // 1. Safety check: NEVER auto-reply in groups or broadcast status
     if (chatJid.endsWith('@g.us') || chatJid.includes('@broadcast')) {
       return;
     }
 
-    // 3. Safety check: Extract incoming text
-    const incomingText = (message.text || message.caption || '').trim();
+    // 2. Safety check: Extract incoming text
+    let incomingText = (message.text || message.caption || '').trim();
     if (!incomingText) {
-      console.log(`[AiResponder] Skipping ${chatJid}: message contains no text or caption.`);
       return;
     }
 
-    // 4. Safety check: Check if Chat has aiEnabled === true in database
+    // 3. Ignore echoes of our own AI bot responses to prevent loops
+    if (this.recentAiSentTexts.has(incomingText)) {
+      return;
+    }
+
+    // 4. Handle self-sent messages (fromMe === true):
+    // If the user sends a message from their own phone or web app, check if they are testing the AI:
+    // Supported triggers: /ai <prompt>, @ai <prompt>, !ai <prompt>, or conversational AI trigger questions
+    let isSelfTestTrigger = false;
+    const isExplicitAiCommand = /^(\/ai|@ai|!ai)\b/i.test(incomingText);
+
+    if (message.fromMe) {
+      if (isExplicitAiCommand) {
+        isSelfTestTrigger = true;
+        incomingText = incomingText.replace(/^(\/ai|@ai|!ai)\s*/i, '').trim();
+      } else {
+        const lower = incomingText.toLowerCase();
+        const isCommonTestPrompt =
+          lower === 'hi' ||
+          lower === 'hii' ||
+          lower === 'hello' ||
+          lower === 'hey' ||
+          lower.includes('who are you') ||
+          lower.includes('what do you do') ||
+          lower.includes('youtube') ||
+          lower.includes('google meet') ||
+          lower.includes('social') ||
+          lower.includes('price') ||
+          lower.includes('pricing') ||
+          lower.includes('service') ||
+          lower.includes('portfolio');
+
+        if (isCommonTestPrompt) {
+          isSelfTestTrigger = true;
+          console.log(`[AiResponder] Self-test trigger from user in ${chatJid}: "${incomingText}"`);
+        } else {
+          // Normal conversation message from user to another person -> cancel any queued auto-reply
+          this.cancelPendingReply(chatJid);
+          return;
+        }
+      }
+    }
+
+    // 5. Safety check: Check if Chat has aiEnabled === true in database
     let chat = await prisma.chat.findUnique({
       where: { sessionId_jid: { sessionId, jid: chatJid } },
       select: { aiEnabled: true },
@@ -355,14 +391,14 @@ export class AiResponderService {
       return; // Not enabled for this chat
     }
 
-    // 5. Safety check: Check session AI master config
+    // 6. Safety check: Check session AI master config
     const config = await this.getConfig(sessionId);
     if (!config.isEnabled) {
       console.log(`[AiResponder] Skipping ${chatJid}: AI Master Toggle is disabled in Settings.`);
       return;
     }
 
-    // 6. Safety check: Per-contact Cooldown check
+    // 7. Safety check: Per-contact Cooldown check
     if (config.cooldownMin > 0) {
       const cooldownMs = config.cooldownMin * 60 * 1000;
       const lastReply = await prisma.aiReplyLog.findFirst({
@@ -394,7 +430,7 @@ export class AiResponderService {
       }
     }
 
-    // 7. Safety check: 24-hour Daily limit cap
+    // 8. Safety check: 24-hour Daily limit cap
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const dailyCount = await prisma.aiReplyLog.count({
       where: {
@@ -408,23 +444,30 @@ export class AiResponderService {
       return;
     }
 
-    // 8. Generate safe reply based on Intent
+    // 9. Generate safe reply based on Intent
     const { replyText, intent } = this.detectIntentAndGenerateReply(incomingText, config);
 
-    // 9. Calculate Human Delay (around 10s: between minDelaySec and maxDelaySec)
-    const minDelay = Math.max(5, config.minDelaySec);
-    const maxDelay = Math.max(minDelay, config.maxDelaySec);
-    const delaySec = Math.floor(minDelay + Math.random() * (maxDelay - minDelay + 1));
+    // 10. Calculate Delay:
+    // For self-test triggers from the user, use a fast 2-second delay so they see it respond!
+    // For external incoming messages, use the full 8-14s human simulation delay.
+    let delaySec: number;
+    if (isSelfTestTrigger) {
+      delaySec = 2;
+    } else {
+      const minDelay = Math.max(5, config.minDelaySec);
+      const maxDelay = Math.max(minDelay, config.maxDelaySec);
+      delaySec = Math.floor(minDelay + Math.random() * (maxDelay - minDelay + 1));
+    }
     const delayMs = delaySec * 1000;
 
     console.log(
-      `[AiResponder] Queuing AI auto-reply for ${chatJid} (intent: ${intent}) with human reading delay: ${delaySec}s`,
+      `[AiResponder] Queuing AI reply for ${chatJid} (intent: ${intent}, isSelfTest: ${isSelfTestTrigger}) with delay: ${delaySec}s`,
     );
 
     // Clear any previous timer on this chat
     this.cancelPendingReply(chatJid);
 
-    // 10. Schedule the Human Simulation Pipeline
+    // 11. Schedule the Human Simulation Pipeline
     const timer = setTimeout(async () => {
       this.pendingReplies.delete(chatJid);
 
@@ -435,27 +478,37 @@ export class AiResponderService {
           return;
         }
 
-        // Re-verify no message was sent by me in the meantime
-        const recentFromMe = await prisma.message.findFirst({
-          where: {
-            sessionId,
-            chatJid,
-            fromMe: true,
-            timestamp: { gte: new Date(Date.now() - delayMs) },
-          },
-        });
+        // Re-verify no newer message was sent manually (for external replies)
+        if (!isSelfTestTrigger) {
+          const recentFromMe = await prisma.message.findFirst({
+            where: {
+              sessionId,
+              chatJid,
+              fromMe: true,
+              timestamp: { gte: new Date(Date.now() - delayMs) },
+            },
+          });
 
-        if (recentFromMe) {
-          console.log(`[AiResponder] User sent manual reply to ${chatJid} during delay. Aborting auto-reply.`);
-          return;
+          if (recentFromMe && recentFromMe.id !== message.id) {
+            console.log(`[AiResponder] User sent manual reply to ${chatJid} during delay. Aborting auto-reply.`);
+            return;
+          }
         }
 
         // Send 'composing' presence to simulate human typing
         await sock.sendPresenceUpdate('composing', chatJid).catch(() => {});
 
-        // Typing duration proportional to text length (~40 WPM, clamp 2.5s - 6s)
-        const typingDurationMs = Math.min(6500, Math.max(2500, replyText.length * 40));
+        // Typing duration proportional to text length (~40 WPM, clamp 2s - 5s)
+        const typingDurationMs = isSelfTestTrigger
+          ? 2000
+          : Math.min(6500, Math.max(2500, replyText.length * 40));
         await new Promise((r) => setTimeout(r, typingDurationMs));
+
+        // Add to recent AI sent cache so we don't echo our own reply
+        this.recentAiSentTexts.add(replyText);
+        setTimeout(() => {
+          this.recentAiSentTexts.delete(replyText);
+        }, 60000);
 
         // Enqueue into existing Outbox queue for safe rate-limiting and anti-ban jitter
         await sendQueue.enqueue({

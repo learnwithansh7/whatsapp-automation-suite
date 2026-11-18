@@ -243,6 +243,41 @@ class SessionManager {
     }
 
     const sessionLogger = this.baseLogger.child({ sessionId });
+
+    // Auto-heal Signal encryption session on Bad MAC / MessageCounterError
+    const origError = sessionLogger.error.bind(sessionLogger);
+    sessionLogger.error = ((...args: unknown[]) => {
+      const obj = args[0] as
+        | { err?: { message?: string }; key?: { remoteJid?: string; participant?: string } }
+        | undefined;
+      if (obj && typeof obj === 'object' && obj.err && obj.key) {
+        const errMsg = String(obj.err.message || obj.err);
+        if (
+          errMsg.includes('Bad MAC') ||
+          errMsg.includes('MessageCounterError') ||
+          errMsg.includes('No matching sessions')
+        ) {
+          const peer = obj.key.participant || obj.key.remoteJid;
+          if (peer) {
+            const rawId = peer.split('@')[0];
+            console.warn(
+              `[SessionManager:${sessionId}] Auto-healing corrupted Signal session for peer ${rawId} (${errMsg})`,
+            );
+            prisma.authKey
+              .deleteMany({
+                where: {
+                  sessionId,
+                  type: 'session',
+                  keyId: { contains: rawId },
+                },
+              })
+              .catch((e) => console.error('[SessionManager] Failed to auto-heal session key:', e));
+          }
+        }
+      }
+      return (origError as Function)(...args);
+    }) as typeof sessionLogger.error;
+
     this.updateStatus(sessionId, 'connecting');
 
     try {
