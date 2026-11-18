@@ -1,7 +1,10 @@
 {
   "name": "whatsapp-client-frontend",
+  "version": "1.0.0",
+  "description": "WhatsApp Web single-page application built with React, Vite, Tailwind CSS, and TanStack Query",
+  "author": "Ansh Verma",
+  "license": "MIT",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

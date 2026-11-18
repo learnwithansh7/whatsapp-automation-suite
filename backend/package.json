@@ -1,6 +1,9 @@
 {
   "name": "whatsapp-client-backend",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Backend API service and Baileys WhatsApp integration with anti-ban Outbox queue and zero-API AI responder",
+  "author": "Ansh Verma",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
