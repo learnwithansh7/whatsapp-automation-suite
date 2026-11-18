@@ -22,6 +22,10 @@ import {
   Clock,
   Video,
   Save,
+  Play,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -173,6 +177,73 @@ export const SettingsView: React.FC = () => {
       addToast({
         title: 'Error',
         message: 'Failed to update AI settings.',
+        type: 'error',
+      });
+    },
+  });
+
+  // Simulator / Test State & Mutation
+  const [testPrompt, setTestPrompt] = useState('who are you');
+  const [testResult, setTestResult] = useState<{
+    prompt: string;
+    intent: string;
+    replyText: string;
+    readingDelaySec: string;
+    typingDurationSec: string;
+    estimatedTotalSec: string;
+  } | null>(null);
+
+  const testMutation = useMutation({
+    mutationFn: (promptOverride?: string) =>
+      api.testAiReply(targetSessionId, typeof promptOverride === 'string' ? promptOverride : testPrompt),
+    onSuccess: (data) => {
+      setTestResult(data);
+    },
+    onError: () => {
+      addToast({
+        title: 'Test Failed',
+        message: 'Could not generate simulated AI reply.',
+        type: 'error',
+      });
+    },
+  });
+
+  // Bulk enable/disable chats mutations
+  const enableAllMutation = useMutation({
+    mutationFn: () => api.enableAllChatsAi(targetSessionId),
+    onSuccess: (data) => {
+      refetchAi();
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      addToast({
+        title: 'AI Auto-Reply Enabled for All Direct Chats',
+        message: `Enabled for ${data.count} 1-on-1 chats. (Groups remain safely excluded).`,
+        type: 'success',
+      });
+    },
+    onError: () => {
+      addToast({
+        title: 'Error',
+        message: 'Failed to bulk-enable chats.',
+        type: 'error',
+      });
+    },
+  });
+
+  const disableAllMutation = useMutation({
+    mutationFn: () => api.disableAllChatsAi(targetSessionId),
+    onSuccess: (data) => {
+      refetchAi();
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+      addToast({
+        title: 'AI Auto-Reply Cleared',
+        message: `Turned off for all ${data.count} chats.`,
+        type: 'info',
+      });
+    },
+    onError: () => {
+      addToast({
+        title: 'Error',
+        message: 'Failed to bulk-disable chats.',
         type: 'error',
       });
     },
@@ -563,6 +634,37 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
 
+            {/* Quick Bulk Chat Activation Controls */}
+            <div className="p-3.5 rounded-control bg-surface-subtle/70 border border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-text-main">
+                  Direct 1-on-1 Chats: <span className="text-accent font-bold">{aiData?.stats.totalEnabledChats ?? 0} enabled</span>
+                </p>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  Activate auto-reply for all personal chats at once, or manage each chat individually. (Groups are permanently excluded).
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => enableAllMutation.mutate()}
+                  disabled={enableAllMutation.isPending}
+                  leftIcon={<Sparkles className="w-3.5 h-3.5 text-accent" />}
+                >
+                  {enableAllMutation.isPending ? 'Enabling...' : 'Enable All 1-on-1 Chats'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => disableAllMutation.mutate()}
+                  disabled={disableAllMutation.isPending}
+                >
+                  Clear All
+                </Button>
+              </div>
+            </div>
+
             {/* Knowledge Base Editor */}
             <div className="flex flex-col gap-4 pt-2 border-t border-border-subtle/50">
               <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
@@ -703,6 +805,95 @@ export const SettingsView: React.FC = () => {
                   {updateAiConfigMutation.isPending ? 'Saving...' : 'Save AI Knowledge & Settings'}
                 </Button>
               </div>
+            </div>
+
+            {/* Interactive Live Simulator / Tester */}
+            <div className="p-4 rounded-control bg-accent-soft/20 border border-accent/30 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-accent" />
+                  <span className="text-xs font-bold text-text-main uppercase tracking-wider">
+                    Interactive Auto-Reply Simulator
+                  </span>
+                </div>
+                <span className="text-[10px] text-text-muted">Test any message without waiting for WhatsApp</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={testPrompt}
+                  onChange={(e) => setTestPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && testPrompt.trim() && testMutation.mutate(undefined)}
+                  placeholder='Try: "who are you", "youtube link", "google meet", "how are you", "pricing"'
+                  className="flex-1 bg-surface border border-border-subtle rounded-control px-3 py-2 text-xs text-text-main placeholder:text-text-muted outline-none focus:border-accent"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => testMutation.mutate(undefined)}
+                  disabled={!testPrompt.trim() || testMutation.isPending}
+                  leftIcon={<Play className="w-3.5 h-3.5" />}
+                >
+                  {testMutation.isPending ? 'Testing...' : 'Test Reply'}
+                </Button>
+              </div>
+
+              {/* Preset Quick Chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {['who are you', 'give me youtube link', 'can we book google meet', 'how are you', 'pricing', 'social links'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setTestPrompt(preset);
+                      testMutation.mutate(preset);
+                    }}
+                    className="px-2 py-1 text-[11px] rounded-control bg-surface border border-border-subtle hover:border-accent hover:text-accent text-text-secondary transition-colors"
+                  >
+                    "{preset}"
+                  </button>
+                ))}
+              </div>
+
+              {testResult && (
+                <div className="p-3 rounded-control bg-surface border border-border-subtle flex flex-col gap-2 mt-1 animate-in fade-in">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-accent flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Intent: <span className="font-mono uppercase">{testResult.intent}</span>
+                    </span>
+                    <span className="text-text-muted font-mono">
+                      Timing: {testResult.readingDelaySec} pause + {testResult.typingDurationSec} typing (total {testResult.estimatedTotalSec})
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-control bg-chat-bubble-out border border-border-subtle/40 text-xs text-text-main whitespace-pre-wrap leading-relaxed shadow-sm">
+                    {testResult.replyText}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Crucial Explanatory Anti-Ban Safeguards Note */}
+            <div className="p-3.5 rounded-control bg-surface-subtle/90 border border-border-subtle text-xs text-text-secondary flex flex-col gap-1.5">
+              <span className="font-semibold text-text-main flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-warning" />
+                How Live Auto-Reply Works & Anti-Ban Rules:
+              </span>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-text-muted pl-1 leading-relaxed">
+                <li>
+                  <strong className="text-text-secondary">Incoming Messages Only:</strong> The bot only replies to messages sent by <strong className="text-text-secondary">other people</strong>. It will not reply if you send a message to yourself or type in the chat box (prevents infinite self-reply loops).
+                </li>
+                <li>
+                  <strong className="text-text-secondary">10s Reading Pause:</strong> Waits 8–14 seconds before replying so WhatsApp server algorithms see realistic human phone usage.
+                </li>
+                <li>
+                  <strong className="text-text-secondary">Typing Simulation:</strong> Shows "typing..." in WhatsApp for 2.5–6.5 seconds proportional to message length.
+                </li>
+                <li>
+                  <strong className="text-text-secondary">Never in Groups:</strong> Group chats are permanently excluded to protect your number from spam detection.
+                </li>
+              </ul>
             </div>
           </CardContent>
         </Card>

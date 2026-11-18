@@ -556,6 +556,31 @@ export const api = {
         body: JSON.stringify({ enabled }),
       },
     ),
+
+  testAiReply: (sessionId: string, text: string) =>
+    request<{
+      prompt: string;
+      intent: string;
+      replyText: string;
+      readingDelaySec: string;
+      typingDurationSec: string;
+      estimatedTotalSec: string;
+    }>(`/api/sessions/${sessionId}/ai/test`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
+
+  enableAllChatsAi: (sessionId: string) =>
+    request<{ success: boolean; count: number }>(`/api/sessions/${sessionId}/ai/enable-all`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  disableAllChatsAi: (sessionId: string) =>
+    request<{ success: boolean; count: number }>(`/api/sessions/${sessionId}/ai/disable-all`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 };
 
 export interface AiConfig {
