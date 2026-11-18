@@ -302,8 +302,13 @@ export class AiResponderService {
     chatJid: string,
     message: { id: string; fromMe: boolean; text?: string | null; caption?: string | null },
   ): Promise<void> {
-    // 1. Safety check: NEVER auto-reply in groups or broadcast status
-    if (chatJid.endsWith('@g.us') || chatJid.includes('@broadcast')) {
+    // 1. Safety check: NEVER auto-reply in groups, newsletters, or broadcast status
+    if (
+      chatJid.endsWith('@g.us') ||
+      chatJid.includes('@broadcast') ||
+      chatJid.endsWith('@newsletter') ||
+      chatJid.includes('@temp')
+    ) {
       return;
     }
 

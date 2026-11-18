@@ -189,13 +189,14 @@ export function initSocketListeners(queryClient: QueryClient): () => void {
   const handleUpdateMessage = (data: {
     sessionId: string;
     messageId: string;
+    outboxId?: string;
     chatJid: string;
     clientId?: string | null;
     status?: string;
     updates?: Partial<MessageItem>;
     message?: MessageItem;
   }) => {
-    const { sessionId, messageId, chatJid, clientId, status, updates, message } = data;
+    const { sessionId, messageId, outboxId, chatJid, clientId, status, updates, message } = data;
     console.log('[Socket Event: message.updated]', {
       messageId,
       clientId,
@@ -243,7 +244,7 @@ export function initSocketListeners(queryClient: QueryClient): () => void {
           pages: old.pages.map((page) => ({
             ...page,
             messages: page.messages.map((m) => {
-              const matchesId = m.id === messageId;
+              const matchesId = m.id === messageId || (outboxId && m.id === outboxId);
               const matchesClient = clientId && (m.id === clientId || m.clientId === clientId);
               if (matchesId || matchesClient) {
                 return {

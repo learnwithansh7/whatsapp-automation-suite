@@ -158,9 +158,13 @@ export function setupSocketIO(httpServer: HttpServer): SocketIOServer {
       console.log(
         `[Socket Emit: message.updated (confirmed)] sessionId=${sessionId}, chatJid=${m.chatJid || 'none'}, outboxId=${outboxId}, clientId=${clientId || 'none'}, messageId=${m.id || 'none'}, status=sent`,
       );
+      // Ensure the confirmed message is always appended to active UI views even if no optimistic bubble existed
+      io.emit('message.new', { sessionId, message });
+
       io.emit('message.updated', {
         sessionId,
         chatJid: m.chatJid,
+        outboxId,
         clientId: clientId || null,
         messageId: m.id,
         status: 'sent',
