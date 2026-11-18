@@ -281,6 +281,7 @@ class IngestionService {
         },
       });
       const isNew = !existingMsg;
+      const isContentUpdate = !!(existingMsg && !existingMsg.text && parsed.text);
 
       let message;
       try {
@@ -314,6 +315,16 @@ class IngestionService {
           },
           update: {
             status: parsed.status,
+            type: parsed.type,
+            text: parsed.text,
+            caption: parsed.caption,
+            mediaMime: parsed.mediaMime,
+            mediaFileName: parsed.mediaFileName,
+            mediaSize: parsed.mediaSize,
+            raw: parsed.raw as object,
+            isForwarded: parsed.isForwarded ?? false,
+            forwardScore: parsed.forwardScore ?? null,
+            mentionedJids: parsed.mentionedJids ?? undefined,
           },
         });
       } catch (upsertErr: unknown) {
@@ -387,7 +398,7 @@ class IngestionService {
 
       // 4. Real-time broadcast if live (not initial bulk sync)
       if (!isHistorySync && this.broadcaster && message) {
-        if (isNew) {
+        if (isNew || isContentUpdate) {
           this.broadcaster.onNewMessage(sessionId, message);
           if (updatedChat) {
             this.broadcaster.onUpdateChat(sessionId, updatedChat);

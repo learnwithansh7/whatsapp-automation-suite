@@ -313,6 +313,11 @@ export function parseWAMessage(msg: proto.IWebMessageInfo, sessionId: string): P
     }
   } else if ((msg as { messageStubType?: number | string }).messageStubType) {
     const stubType = (msg as { messageStubType?: number | string }).messageStubType!;
+    const typeStr = String(stubType).toUpperCase();
+    // Ignore CIPHERTEXT stub (type 2) so temporary decryption failures waiting on retry aren't saved as phantom system messages
+    if (typeStr === '2' || typeStr.includes('CIPHERTEXT')) {
+      return null;
+    }
     const stubParams = (msg as { messageStubParameters?: string[] }).messageStubParameters;
     type = 'system';
     text = formatStubTypeNotice(stubType, stubParams);
