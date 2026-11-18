@@ -32,8 +32,10 @@
   - **Human Simulation**: 8–14 second reading delay + 2.5–6.5 second typing simulation (`composing` state).
   - **Auto-Cancellation**: Immediately aborts auto-reply if you reply manually from your phone.
   - **Privacy First**: 100% local intent matching — zero external API keys, zero cloud LLM data leaks.
+  - **Self-Testing & Interactive Simulator**: Test prompts right in the chat using `/ai <prompt>` or conversational triggers, or use the interactive Simulator card in Settings.
   - **Customizable Knowledge Base**: Answers identity questions (*"Who are you?"*), YouTube channel links & subscriber counts, Google Meet scheduling, and socials directly from your Settings config.
-  - **Anti-Ban Safety**: Off by default, enabled per-chat; permanently blocked for group chats (`@g.us`).
+  - **Anti-Ban Safety**: Off by default, enabled per-chat (with one-click bulk enable/disable); permanently blocked for group chats (`@g.us`) and broadcast channels (`@newsletter`).
+  - **Resilient Signal Encryption**: Self-heals out-of-sync encryption sessions (`Bad MAC` / `MessageCounterError`) automatically.
 - **Rich Media & Voice Notes**:
   - Drag-and-drop & clipboard paste for images, videos, audio, and documents.
   - Voice recording in-browser converted server-side to WhatsApp-compliant OGG/Opus mono 16 kHz via bundled `ffmpeg-static`.
@@ -210,7 +212,7 @@ All 101 unit tests across 10 test suites run in ~3.5 seconds.
 Incoming WhatsApp Message
          │
          ▼
-[Ingestion Service] ─── Is AI enabled for this chat? (1-on-1 only, never @g.us)
+[Ingestion Service] ─── Is AI enabled for this chat? (1-on-1 only, never @g.us or @newsletter)
          │ Yes
          ▼
 [AI Responder] ──────── Randomized 8–14s Human Reading Delay
